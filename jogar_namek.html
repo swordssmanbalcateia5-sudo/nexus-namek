@@ -271,6 +271,30 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
 .role-pill{background:var(--surface-alt);color:#d2d4df}
 .daily-clock{background:var(--surface);border-color:var(--line)}
 .topbar{border-bottom:1px solid var(--line);margin-bottom:4px}
+
+
+/* Enciclopédia, trancar cópias e venda em lote */
+.collection-head-right{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.subtab-group{display:inline-flex;gap:4px}
+.subtab-group .ghost[aria-pressed="true"]{background:#12211d;border-color:#2d5a4b;color:var(--mint)}
+.batch-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;margin-bottom:12px;border-radius:7px;background:var(--surface);border:1px solid var(--line);font-size:13px}
+.batch-bar label{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.lock-pill{display:inline-flex;align-items:center;padding:2px 6px;border-radius:5px;font-size:11px;font-weight:600;background:#2a2518;color:var(--gold);border:1px solid #6b582a}
+.dex-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.dex-card{border:1px solid var(--line);border-top:2px solid var(--tone);border-radius:8px;background:var(--surface);padding:10px;display:grid;gap:8px}
+.dex-card.dex-missing{opacity:.55}
+.dex-card.dex-missing img{filter:brightness(.18) saturate(0)}
+.dex-head{display:flex;align-items:center;gap:10px;min-width:0}
+.dex-head img{width:46px;height:46px;object-fit:contain;image-rendering:pixelated;flex:none}
+.dex-head>div{min-width:0}
+.dex-head strong{display:block;font-size:14px}
+.dex-head small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.dex-flags{display:flex;flex-wrap:wrap;gap:6px}
+.dex-section-title{margin:20px 0 10px!important}
+.dex-traits{display:flex;flex-wrap:wrap;gap:6px}
+.dex-trait{font-size:12px;padding:4px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+.dex-trait.seen{border-color:#2d5a4b;color:var(--ink);background:#12211d}
+.dex-trait small{color:var(--muted);margin-left:4px}
 </style>
 </head>
 <body>
@@ -1242,6 +1266,7 @@ function settle(state,battle){
       const serial=1+(state.serials?.[key]??state.collection.reduce((max,c)=>c.id===id&&!!c.shiny===!!shiny?Math.max(max,c.serial):max,0));
       (state.serials??={})[key]=serial;
       const copy={...battle.recruit,uid:`catch-${state.index}`,xp:xpTo(Math.min(levelCap(state),battle.level)),serial};
+      recordDex(state,copy);
       const settings=state.autoSell,tier=CHARACTERS[id].tier;
       const match=saleMatches(settings,copy);
       if(match&&state.collection.some(c=>c.id===id&&!!c.shiny===!!shiny)){
@@ -1520,15 +1545,93 @@ function autoFormation(state, mode='power', now=Date.now()){
   return true;
 }
 
+function recordDex(state,unit){
+  if(!unit||!Object.hasOwn(CHARACTERS,unit.id))return;
+  const dex=state.dex??={normal:[],shiny:[],traits:[]};
+  const bucket=unit.shiny?(dex.shiny??=[]):(dex.normal??=[]);
+  if(!bucket.includes(unit.id))bucket.push(unit.id);
+  if(unit.trait&&TRAITS.some(t=>t.name===unit.trait)){
+    const traits=dex.traits??=[];
+    if(!traits.includes(unit.trait))traits.push(unit.trait);
+  }
+}
+function dexSummary(state){
+  const normal=new Set(Array.isArray(state.dex?.normal)?state.dex.normal:[]);
+  const shiny=new Set(Array.isArray(state.dex?.shiny)?state.dex.shiny:[]);
+  const traitsSeen=new Set(Array.isArray(state.dex?.traits)?state.dex.traits:[]);
+  const counts=new Map(),traitCounts=new Map();
+  for(const u of state.collection){
+    if(!Object.hasOwn(CHARACTERS,u.id))continue;
+    if(u.shiny)shiny.add(u.id);else normal.add(u.id);
+    counts.set(u.id,(counts.get(u.id)??0)+1);
+    if(u.trait){traitsSeen.add(u.trait);traitCounts.set(u.trait,(traitCounts.get(u.trait)??0)+1);}
+  }
+  const worldsByUniverse=new Map();
+  for(const w of WORLDS){
+    if(!worldsByUniverse.has(w.universe))worldsByUniverse.set(w.universe,[]);
+    worldsByUniverse.get(w.universe).push(w.name);
+  }
+  const characters=Object.values(CHARACTERS).map(c=>({
+    ...c,normal:normal.has(c.id),shiny:shiny.has(c.id),seen:normal.has(c.id)||shiny.has(c.id),
+    count:counts.get(c.id)??0,worlds:worldsByUniverse.get(c.universe)??[]
+  })).sort((a,b)=>a.tier-b.tier||a.name.localeCompare(b.name,'pt-BR'));
+  const traits=TRAITS.map(t=>({...t,seen:traitsSeen.has(t.name),count:traitCounts.get(t.name)??0}));
+  return {
+    characters,traits,
+    totals:{
+      seenChars:characters.filter(c=>c.seen).length,totalChars:characters.length,
+      shinyChars:characters.filter(c=>c.shiny).length,
+      seenTraits:traits.filter(t=>t.seen).length,totalTraits:traits.length
+    }
+  };
+}
+
 function canSellUnit(state, uid){
   if(!uid||state.collection.length<=1||state.team.includes(uid))return false;
-  return state.collection.some(u=>u.uid===uid);
+  const unit=state.collection.find(u=>u.uid===uid);
+  return !!unit&&unit.locked!==true;
+}
+function toggleLock(state, uid, locked){
+  if(typeof uid!=='string'||typeof locked!=='boolean')return false;
+  const unit=state.collection.find(u=>u.uid===uid);
+  if(!unit||Boolean(unit.locked)===locked)return false;
+  if(locked)unit.locked=true;else delete unit.locked;
+  return true;
+}
+function duplicateSellCandidates(state,{includeCommonTraits=false}={}){
+  const teamSet=new Set(state.team);
+  const traitOdds=new Map(TRAITS.map(t=>[t.name,t.odds]));
+  const groups=new Map();
+  for(const u of state.collection){
+    const key=`${u.id}:${u.shiny?1:0}`;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(u);
+  }
+  const candidates=[];
+  for(const list of groups.values()){
+    if(list.length<=1)continue;
+    const sorted=list.slice().sort((a,b)=>{
+      const pa=teamSet.has(a.uid)||a.locked?1:0,pb=teamSet.has(b.uid)||b.locked?1:0;
+      if(pa!==pb)return pb-pa;
+      return projectedPower(b)-projectedPower(a)||b.xp-a.xp||a.serial-b.serial;
+    });
+    for(const u of sorted.slice(1)){
+      if(teamSet.has(u.uid)||u.locked||u.shiny)continue;
+      if(u.trait){
+        if(!includeCommonTraits)continue;
+        if((traitOdds.get(u.trait)??Infinity)>=50)continue;
+      }
+      candidates.push(u);
+    }
+  }
+  return candidates;
 }
 function sellUnit(state, uid){
   if(!canSellUnit(state,uid))return false;
   hydrateAwayRecruits(state);
   const index=state.collection.findIndex(u=>u.uid===uid);
   const [unit]=state.collection.splice(index,1);
+  recordDex(state,unit);
   const gold=SALE_PRICES[CHARACTERS[unit.id].tier-1]??0;
   state.gold+=gold;
   delete state.positions?.[uid];
@@ -1541,6 +1644,17 @@ function sellUnit(state, uid){
     }
   }
   return gold;
+}
+function sellBatch(state, uids){
+  if(!Array.isArray(uids)||!uids.length||uids.length>200)return false;
+  const unique=[...new Set(uids.filter(u=>typeof u==='string'&&u.length>0))];
+  if(!unique.length)return false;
+  let sold=0,gold=0;
+  for(const uid of unique){
+    const gain=sellUnit(state,uid);
+    if(gain!==false){sold++;gold+=gain;}
+  }
+  return sold?{sold,gold}:false;
 }
 
 function applyGameAction(state,action,now){
@@ -1619,14 +1733,16 @@ function applyGameAction(state,action,now){
     }
     case 'autoFormation': return autoFormation(state,action.mode??'power',now);
     case 'formationPreset': return applyFormationPreset(state,action.preset);
+    case 'lock': return toggleLock(state,action.uid,action.locked);
     case 'sell': return sellUnit(state,action.uid)!==false;
+    case 'sellBatch': return sellBatch(state,action.uids)!==false;
     default: return false;
   }
 }
 
-return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction};
+return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,dexSummary,canSellUnit,toggleLock,duplicateSellCandidates,sellUnit,sellBatch,applyGameAction};
 })();
-const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction}=game;
+const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,dexSummary,canSellUnit,toggleLock,duplicateSellCandidates,sellUnit,sellBatch,applyGameAction}=game;
 const communityRules = (()=>{
 
 // A daily period is keyed by the local calendar date on which its noon began.
@@ -2491,6 +2607,7 @@ function renderProfile(){
     </section>
     <section class="card"><h3>Recrutamento</h3><p>${unit.odds?`Chance registrada no encontro · 1 em ${int.format(unit.odds)}`:'Integrante inicial'}</p>
       ${unit.shiny?'<p class="caption">Shiny concede +25% a PV, Ataque, Magia, Defesa e Resistência.</p>':''}
+      ${!publicUnit?`<button type="button" class="ghost" data-lock="${unit.uid}">${unit.locked?'Destrancar cópia':'Trancar cópia'}</button>`:''}
     </section>
   </div>`;
   if(content===profileContent)return;
@@ -2598,7 +2715,9 @@ function renderWorldNav(){
 }
 
 let autoFormMode='power';
-const colFilter={search:'',sort:'potential',role:'',tier:'',shiny:false,trait:false};
+let colView='inventory',batchMode='plain';
+const colFilter={search:'',sort:'potential',role:'',tier:'',shiny:false,trait:false,locked:false};
+const dexFilter={status:'all',tier:'',universe:''};
 const ROLE_TAG={Guardião:'GUA',Combatente:'COM',Mágico:'MAG',Suporte:'SUP'};
 function countAffordableUpgrades(){
   return Object.entries(UPGRADES).filter(([id,u])=>{
@@ -2665,6 +2784,7 @@ function filteredCollection(){
     if(colFilter.tier&&c.tier!==Number(colFilter.tier))return false;
     if(colFilter.shiny&&!unit.shiny)return false;
     if(colFilter.trait&&!unit.trait)return false;
+    if(colFilter.locked&&!unit.locked)return false;
     return true;
   });
   list.sort((a,b)=>{
@@ -2676,7 +2796,18 @@ function filteredCollection(){
   });
   return list;
 }
+function renderBatchBar(){
+  const bar=$('#batch-sell-bar');if(!bar)return;
+  const list=duplicateSellCandidates(state,{includeCommonTraits:batchMode==='common'}).slice(0,200);
+  const totalGold=list.reduce((sum,u)=>sum+(SALE_PRICES[CHARACTERS[u.id].tier-1]??0),0);
+  const btn=bar.querySelector('#batch-sell-btn');
+  if(btn){
+    btn.disabled=!list.length;
+    btn.textContent=list.length?`Vender ${list.length} duplicata${list.length>1?'s':''} (+${int.format(totalGold)} ouro)`:'Sem duplicatas vendáveis';
+  }
+}
 function renderCollectionGrid(){
+  renderBatchBar();
   const grid=$('#collection-list');if(!grid)return;
   const slots=formationSlots(state);
   const index=pickSlot??(slots.includes(null)?slots.indexOf(null):3);
@@ -2687,10 +2818,27 @@ function renderCollectionGrid(){
   if(countEl)countEl.textContent=items.length===state.collection.length?`${state.collection.length} personagens recrutados`:`Mostrando ${items.length} de ${state.collection.length} personagens`;
   grid.innerHTML=items.length?items.map(({unit,c,power,potential})=>{
     const inTeam=teamSet.has(unit.uid);
-    const sellable=allowSell&&!inTeam;
+    const locked=unit.locked===true;
+    const sellable=allowSell&&!inTeam&&!locked;
     const price=SALE_PRICES[c.tier-1]??0;
-    return `<div class="collection-card" style="--tone:${COLORS[c.color]}"><button class="character-hit" data-profile="${unit.uid}">${unitSummary(unit)}</button><p class="collection-meta"><span class="role-pill">${c.role}</span> <span class="power-pill">Força ${int.format(power)}</span> <span class="power-pill">Nv. 100 · ${int.format(potential)}</span>${unit.trait?` <span class="trait-pill">${unit.trait}</span>`:''}</p><p>${c.skill} · ${c.universe}</p><div class="collection-actions"><button class="ghost" data-equip="${unit.uid}" data-slot="${index}" data-occupant="${slots[index]??''}" ${inTeam?'disabled':''}>${inTeam?'Na equipe':slots[index]?'Substituir na vaga '+(index+1):'Colocar na vaga '+(index+1)}</button>${sellable?`<button class="ghost sell-btn" data-sell="${unit.uid}">Vender (+${int.format(price)})</button>`:''}</div></div>`;
+    return `<div class="collection-card" style="--tone:${COLORS[c.color]}"><button class="character-hit" data-profile="${unit.uid}">${unitSummary(unit)}</button><p class="collection-meta"><span class="role-pill">${c.role}</span> <span class="power-pill">Força ${int.format(power)}</span> <span class="power-pill">Nv. 100 · ${int.format(potential)}</span>${unit.trait?` <span class="trait-pill">${unit.trait}</span>`:''}${locked?' <span class="lock-pill">Trancada</span>':''}</p><p>${c.skill} · ${c.universe}</p><div class="collection-actions"><button class="ghost" data-equip="${unit.uid}" data-slot="${index}" data-occupant="${slots[index]??''}" ${inTeam?'disabled':''}>${inTeam?'Na equipe':slots[index]?'Substituir na vaga '+(index+1):'Colocar na vaga '+(index+1)}</button><button class="ghost" data-lock="${unit.uid}">${locked?'Destrancar':'Trancar'}</button>${sellable?`<button class="ghost sell-btn" data-sell="${unit.uid}">Vender (+${int.format(price)})</button>`:''}</div></div>`;
   }).join(''):'<p class="caption">Nenhum personagem encontrado com os filtros selecionados.</p>';
+}
+function renderDexPanel(panel){
+  const dex=dexSummary(state);
+  const universes=[...new Set(dex.characters.map(c=>c.universe))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const chars=dex.characters.filter(c=>{
+    if(dexFilter.status==='seen'&&!c.seen)return false;
+    if(dexFilter.status==='missing'&&c.seen)return false;
+    if(dexFilter.tier&&c.tier!==Number(dexFilter.tier))return false;
+    if(dexFilter.universe&&c.universe!==dexFilter.universe)return false;
+    return true;
+  });
+  panel.innerHTML=`<article class="card"><div class="swap"><div><h2>Enciclopédia</h2><p class="caption">Personagens ${dex.totals.seenChars}/${dex.totals.totalChars} · Shiny ${dex.totals.shinyChars}/${dex.totals.totalChars} · Traits ${dex.totals.seenTraits}/${dex.totals.totalTraits}</p></div><div class="subtab-group" role="group" aria-label="Modo da coleção"><button type="button" class="ghost" data-col-view="inventory" aria-pressed="false">Inventário</button><button type="button" class="ghost" data-col-view="dex" aria-pressed="true">Enciclopédia</button></div></div>
+    <div class="collection-filters"><label>Status <select id="dex-status"><option value="all" ${dexFilter.status==='all'?'selected':''}>Todos</option><option value="seen" ${dexFilter.status==='seen'?'selected':''}>Descobertos</option><option value="missing" ${dexFilter.status==='missing'?'selected':''}>Faltantes</option></select></label><label>Raridade <select id="dex-tier"><option value="">Todas</option>${TIERS.map((t,i)=>`<option value="${i+1}" ${dexFilter.tier===String(i+1)?'selected':''}>${t}</option>`).join('')}</select></label><label>Universo <select id="dex-universe"><option value="">Todos</option>${universes.map(u=>`<option value="${u}" ${dexFilter.universe===u?'selected':''}>${u}</option>`).join('')}</select></label></div>
+    <div class="dex-grid">${chars.length?chars.map(c=>`<div class="dex-card ${c.seen?'':'dex-missing'}" style="--tone:${COLORS[c.color]}"><div class="dex-head">${img(spriteFor({id:c.id,shiny:false}))}<div><strong>${c.name}</strong><small>${TIERS[c.tier-1]} · ${c.role} · ${c.color}</small><small>${c.worlds.length?`Preferência (60%): ${c.worlds.join(', ')}`:'Todos os mundos'}</small></div></div><div class="dex-flags">${c.normal?'<span class="power-pill">Normal</span>':'<span class="role-pill">Sem normal</span>'}${c.shiny?'<span class="leader-pill">Shiny</span>':''}${c.count?`<span class="role-pill">${c.count} na coleção</span>`:''}</div></div>`).join(''):'<p class="caption">Nenhum personagem neste filtro.</p>'}</div>
+    <h3 class="dex-section-title">Traits descobertas (${dex.totals.seenTraits}/${dex.totals.totalTraits})</h3>
+    <div class="dex-traits">${dex.traits.map(t=>`<span class="dex-trait ${t.seen?'seen':''}">${t.name} <small>1/${int.format(t.odds)}</small></span>`).join('')}</div></article>`;
 }
 function floatTag(target,text,cls=''){
   if(!target||!preferences.numbers)return;
@@ -2753,6 +2901,7 @@ function renderPanel(){
         ${reserves.length?`<label>Substituir <select data-replace="${uid}"><option value="">Escolher reserva</option>${reserves.map(r=>`<option value="${r.uid}">${CHARACTERS[r.id].name} (${CHARACTERS[r.id].role}, Nv. ${levelAt(r.xp)}, Força ${int.format(unitPower(r))})</option>`).join('')}</select></label>`:''}</div>`;
       }).join('')}</div></article></div>`;
   }else if(tab==='colecao'){
+    if(colView==='dex'){renderDexPanel(panel);return;}
     const slots=formationSlots(state);
     const index=pickSlot??(slots.includes(null)?slots.indexOf(null):3);
     const slotOptions=slots.map((uid,i)=>`<option value="${i}" ${index===i?'selected':''}>${i+1} · ${uid?card(uid).name:'Vazia'}</option>`).join('');
@@ -2761,8 +2910,9 @@ function renderPanel(){
       if(target){target.innerHTML=slotOptions;target.value=String(index);}
     }else{
       const searchValue=colFilter.search.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-      panel.innerHTML=`<article class="card"><div class="swap"><div><h2>Coleção</h2><p class="caption" id="collection-filtered-count"></p></div><label>Vaga de destino <select id="swap-target">${slotOptions}</select></label></div>
-    <div class="collection-filters"><label class="search-field"><span>Buscar</span><input type="search" id="col-search" placeholder="Nome, universo ou trait" value="${searchValue}"></label><select id="col-sort" aria-label="Ordenar coleção"><option value="potential" ${colFilter.sort==='potential'?'selected':''}>Força no nível 100</option><option value="power" ${colFilter.sort==='power'?'selected':''}>Maior força</option><option value="level" ${colFilter.sort==='level'?'selected':''}>Maior nível</option><option value="tier" ${colFilter.sort==='tier'?'selected':''}>Maior raridade</option><option value="recent" ${colFilter.sort==='recent'?'selected':''}>Mais recente</option></select><select id="col-role" aria-label="Filtrar por função"><option value="">Todas funções</option>${['Guardião','Combatente','Mágico','Suporte'].map(r=>`<option value="${r}" ${colFilter.role===r?'selected':''}>${r}</option>`).join('')}</select><select id="col-tier" aria-label="Filtrar por raridade"><option value="">Todas raridades</option>${TIERS.map((t,i)=>`<option value="${i+1}" ${colFilter.tier===String(i+1)?'selected':''}>${t}</option>`).join('')}</select><label class="filter-check"><input type="checkbox" id="col-shiny" ${colFilter.shiny?'checked':''}> Shiny</label><label class="filter-check"><input type="checkbox" id="col-trait" ${colFilter.trait?'checked':''}> Com Trait</label></div>
+      panel.innerHTML=`<article class="card"><div class="swap"><div><h2>Coleção</h2><p class="caption" id="collection-filtered-count"></p></div><div class="collection-head-right"><div class="subtab-group" role="group" aria-label="Modo da coleção"><button type="button" class="ghost" data-col-view="inventory" aria-pressed="true">Inventário</button><button type="button" class="ghost" data-col-view="dex" aria-pressed="false">Enciclopédia</button></div><label>Vaga de destino <select id="swap-target">${slotOptions}</select></label></div></div>
+    <div class="collection-filters"><label class="search-field"><span>Buscar</span><input type="search" id="col-search" placeholder="Nome, universo ou trait" value="${searchValue}"></label><select id="col-sort" aria-label="Ordenar coleção"><option value="potential" ${colFilter.sort==='potential'?'selected':''}>Força no nível 100</option><option value="power" ${colFilter.sort==='power'?'selected':''}>Maior força</option><option value="level" ${colFilter.sort==='level'?'selected':''}>Maior nível</option><option value="tier" ${colFilter.sort==='tier'?'selected':''}>Maior raridade</option><option value="recent" ${colFilter.sort==='recent'?'selected':''}>Mais recente</option></select><select id="col-role" aria-label="Filtrar por função"><option value="">Todas funções</option>${['Guardião','Combatente','Mágico','Suporte'].map(r=>`<option value="${r}" ${colFilter.role===r?'selected':''}>${r}</option>`).join('')}</select><select id="col-tier" aria-label="Filtrar por raridade"><option value="">Todas raridades</option>${TIERS.map((t,i)=>`<option value="${i+1}" ${colFilter.tier===String(i+1)?'selected':''}>${t}</option>`).join('')}</select><label class="filter-check"><input type="checkbox" id="col-shiny" ${colFilter.shiny?'checked':''}> Shiny</label><label class="filter-check"><input type="checkbox" id="col-trait" ${colFilter.trait?'checked':''}> Com Trait</label><label class="filter-check"><input type="checkbox" id="col-locked" ${colFilter.locked?'checked':''}> Trancadas</label></div>
+    <div class="batch-bar" id="batch-sell-bar"><label>Venda em lote <select id="batch-sell-mode"><option value="plain" ${batchMode==='plain'?'selected':''}>Duplicatas sem trait</option><option value="common" ${batchMode==='common'?'selected':''}>Duplicatas (incl. traits até 1/25)</option></select></label><button type="button" class="ghost sell-btn" id="batch-sell-btn">Sem duplicatas vendáveis</button></div>
     <div class="collection-grid" id="collection-list"></div></article>`;
     }
     renderCollectionGrid();
@@ -2914,6 +3064,27 @@ document.addEventListener('click',e=>{
     void transaction({type:'autoFormation',mode:autoFormMode}).then(ok=>{if(ok)note('Formação atualizada.');});
   }
   if(b.dataset.preset)void transaction({type:'formationPreset',preset:b.dataset.preset});
+  if(b.dataset.colView){colView=b.dataset.colView;renderPanel();return;}
+  if(b.dataset.lock){
+    const u=copy(b.dataset.lock);
+    if(u){
+      const nextLocked=!u.locked;
+      void transaction({type:'lock',uid:u.uid,locked:nextLocked}).then(ok=>{
+        if(ok)note(`${CHARACTERS[u.id].name} ${serial(u)} ${nextLocked?'trancada':'destrancada'}.`);
+      });
+    }
+  }
+  if(b.id==='batch-sell-btn'){
+    const list=duplicateSellCandidates(state,{includeCommonTraits:batchMode==='common'}).slice(0,200);
+    if(list.length){
+      const totalGold=list.reduce((sum,u)=>sum+(SALE_PRICES[CHARACTERS[u.id].tier-1]??0),0);
+      if(confirm(`Vender ${list.length} cópia${list.length>1?'s':''} duplicada${list.length>1?'s':''} por ${int.format(totalGold)} ouro? Titulares, cópias trancadas, Shiny e a melhor cópia de cada personagem permanecem na coleção.`)){
+        void transaction({type:'sellBatch',uids:list.map(u=>u.uid)}).then(ok=>{
+          if(ok)note(`${list.length} cópia${list.length>1?'s':''} vendida${list.length>1?'s':''} por +${int.format(totalGold)} ouro.`);
+        });
+      }
+    }
+  }
   if(b.dataset.sell){
     const u=copy(b.dataset.sell);
     if(u&&canSellUnit(state,u.uid)){
@@ -2927,7 +3098,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.area!==undefined)void transaction({type:'area',area:Number(b.dataset.area)});
   if(b.dataset.leader)void transaction({type:'leader',uid:b.dataset.leader});
   if(b.dataset.remove)void transaction({type:'remove',uid:b.dataset.remove});
-  if(b.dataset.vaga!==undefined){pickSlot=Number(b.dataset.vaga);tab='colecao';history.replaceState(null,'','#colecao');renderPanel();}
+  if(b.dataset.vaga!==undefined){pickSlot=Number(b.dataset.vaga);colView='inventory';tab='colecao';history.replaceState(null,'','#colecao');renderPanel();}
   if(b.dataset.equip){
     const uid=b.dataset.equip,slot=Number(b.dataset.slot);
     void transaction({type:'equip',uid,slot,replaced:b.dataset.occupant||null}).then(ok=>{
@@ -2969,6 +3140,11 @@ document.addEventListener('change',e=>{const target=e.target;
   if(target.id==='col-tier'){colFilter.tier=target.value;renderCollectionGrid();return;}
   if(target.id==='col-shiny'){colFilter.shiny=target.checked;renderCollectionGrid();return;}
   if(target.id==='col-trait'){colFilter.trait=target.checked;renderCollectionGrid();return;}
+  if(target.id==='col-locked'){colFilter.locked=target.checked;renderCollectionGrid();return;}
+  if(target.id==='batch-sell-mode'){batchMode=target.value;renderBatchBar();return;}
+  if(target.id==='dex-status'){dexFilter.status=target.value;renderPanel();return;}
+  if(target.id==='dex-tier'){dexFilter.tier=target.value;renderPanel();return;}
+  if(target.id==='dex-universe'){dexFilter.universe=target.value;renderPanel();return;}
   if(target.dataset.pref){
     preferences[target.dataset.pref]=target.checked;
     document.documentElement.dataset.motion=preferences.motion?'on':'off';
