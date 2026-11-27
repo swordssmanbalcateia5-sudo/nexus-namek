@@ -52,3 +52,7 @@ Abra **Arena → Começar duelo** para treinar com sua formação contra a equip
 Na Coleção, filtre a raridade e ordene por **Força no nível 100**. O potencial soma os seis atributos no nível 100, incluindo os modificadores da cópia. A autoformação usa essa projeção e também considera o bônus do líder e o critério escolhido.
 
 Na Comunidade, cada personagem tem uma sequência global para a versão normal e outra para a shiny. Vendas não liberam números. Na migração, as contas antigas recebem faixas por ordem de criação, mantendo a ordem de cada jogador dentro da faixa. O modo solo usa seriais locais.
+
+## Chefe do dia (Raid de Dano)
+
+Na aba **Raid**, um chefe rotativo definido por `dailyCycle` (reset às 12h no fuso `America/Sao_Paulo`) oferece **3 tentativas por ciclo** com atributos padronizados para todos os jogadores. O objetivo é causar o maior dano total em 60 s, recebendo ouro de participação e disputando o ranking diário **Chefe do dia** na Comunidade.

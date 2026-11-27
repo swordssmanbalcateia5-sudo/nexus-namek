@@ -271,6 +271,15 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
 .role-pill{background:var(--surface-alt);color:#d2d4df}
 .daily-clock{background:var(--surface);border-color:var(--line)}
 .topbar{border-bottom:1px solid var(--line);margin-bottom:4px}
+
+
+/* Chefe Diário / Raid de Dano */
+.raid-boss{display:flex;align-items:center;gap:14px;padding:12px;margin:10px 0 12px;border-radius:8px;background:var(--surface);border:1px solid var(--line);border-top:2px solid var(--tone)}
+.raid-boss img{width:76px;height:76px;object-fit:contain;image-rendering:pixelated;flex:none}
+.raid-boss strong{display:block;font-size:15px}
+.raid-boss small{display:block;color:var(--muted);font-size:12px;margin-top:4px;line-height:1.4}
+.raid-stats{margin-bottom:14px}
+.raid-go{width:100%}
 </style>
 </head>
 <body>
@@ -289,6 +298,7 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
     <div class="game-main">
     <nav class="tabs" aria-label="Seções do jogo">
       <button type="button" data-tab="exploracao" aria-controls="panel">Exploração <b id="boss-ready-badge" class="tab-badge boss-badge" hidden>Chefe</b></button>
+      <button type="button" data-tab="raid" aria-controls="panel">Raid</button>
       <button type="button" data-tab="arena" aria-controls="panel">Arena</button>
       <button type="button" data-tab="formacao" aria-controls="panel">Formação</button>
       <button type="button" data-tab="colecao" aria-controls="panel">Coleção <b id="collection-count">4</b></button>
@@ -687,6 +697,97 @@ class Combate {
 
 return {affinity,Combate};
 })();
+const communityRules = (()=>{
+
+// A daily period is keyed by the local calendar date on which its noon began.
+const DAILY_ZONE='America/Sao_Paulo';
+const GIFT_GOLD=10;
+const PROFILE_OPTIONS={
+  background:{namek:'Namek · Dragon Ball',arlong:'Arlong Park · One Piece',konoha:'Konoha · Naruto',
+    seireitei:'Seireitei · Bleach',shibuya:'Shibuya · Jujutsu Kaisen',clover:'Reino Clover · Black Clover',
+    britannia:'Britannia · Nanatsu no Taizai',morioh:'Morioh · JoJo',heavens:'Heavens Arena · Hunter × Hunter',
+    cidadez:'Cidade Z · One Punch Man',noite:'Noite violeta',aurora:'Aurora turquesa'},
+  icon:{estrela:'Estrela',cometa:'Cometa',escudo:'Escudo'},
+  border:{menta:'Menta',violeta:'Violeta',ouro:'Ouro'},
+};
+const DEFAULT_PROFILE={background:'namek',icon:'estrela',border:'menta'};
+const PROFILE_WORLDS={namek:0,arlong:1,konoha:2,seireitei:3,shibuya:4,clover:5,britannia:6,morioh:7,heavens:8,cidadez:9};
+const AVATAR_SIZE=128;
+const PROFILE_BODY_LIMIT=100*1024;
+
+// The browser sends only its square canvas export, never a remote image URL.
+function validAvatar(value){
+  const prefix='data:image/png;base64,';
+  if(typeof value!=='string'||value.length>98000||!value.startsWith(prefix))return false;
+  const encoded=value.slice(prefix.length);
+  if(encoded.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))return false;
+  const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
+  const signature=[137,80,78,71,13,10,26,10];
+  if(bytes.length<57||!signature.every((b,i)=>bytes[i]===b))return false;
+  const view=new DataView(bytes.buffer);
+  let hasData=false;
+  for(let pos=8;pos+12<=bytes.length;){
+    const length=view.getUint32(pos);
+    const kind=String.fromCharCode(...bytes.subarray(pos+4,pos+8));
+    const end=pos+12+length;
+    if(end>bytes.length)return false;
+    if(pos===8){
+      if(kind!=='IHDR'||length!==13||view.getUint32(16)!==AVATAR_SIZE||view.getUint32(20)!==AVATAR_SIZE||
+          bytes[24]!==8||![2,6].includes(bytes[25])||bytes[26]||bytes[27]||bytes[28])return false;
+    }else if(kind==='IDAT')hasData ||= length>0;
+    else if(kind==='IEND')return hasData&&length===0&&end===bytes.length;
+    else if(!['sRGB','pHYs','cHRM','gAMA','iCCP','sBIT','cICP'].includes(kind))return false;
+    pos=end;
+  }
+  return false;
+}
+function appearancePatch(input){
+  const patch={};
+  for(const key of Object.keys(DEFAULT_PROFILE)){
+    if(typeof input?.[key]!=='string'||!Object.hasOwn(PROFILE_OPTIONS[key],input[key]))throw Error('Escolha as opções de aparência do perfil.');
+    patch[key]=input[key];
+  }
+  if(Object.hasOwn(input,'avatar')){
+    if(input.avatar!==null&&!validAvatar(input.avatar))throw Error('A foto precisa ser uma imagem válida. Escolha o arquivo novamente.');
+    patch.avatar=input.avatar;
+  }
+  return patch;
+}
+const localParts=new Intl.DateTimeFormat('en-GB',{
+  timeZone:DAILY_ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',
+  minute:'2-digit',second:'2-digit',hourCycle:'h23',
+});
+function localFields(time){
+  return Object.fromEntries(localParts.formatToParts(time).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+}
+function localNoon(plainDate){
+  const desired=plainDate+12*3600000;
+  let time=desired;
+  for(let attempt=0;attempt<3;attempt++){
+    const f=localFields(time);
+    const actual=Date.UTC(f.year,f.month-1,f.day,f.hour,f.minute,f.second);
+    if(actual===desired)return time;
+    time+=desired-actual;
+  }
+  return time;
+}
+function dailyCycle(now=Date.now()){
+  const f=localFields(now);
+  const today=Date.UTC(f.year,f.month-1,f.day);
+  const startDate=today-(f.hour<12?86400000:0);
+  return {day:new Date(startDate).toISOString().slice(0,10),nextAt:localNoon(startDate+86400000)};
+}
+
+function rarityLabel(odds){
+  const format=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
+  for(const [divisor,suffix] of [[1e9,'B'],[1e6,'M'],[1e3,' mil']]){
+    if(odds>=divisor)return '1/'+format.format(odds/divisor)+suffix;
+  }
+  return '1/'+format.format(odds);
+}
+
+return {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,DEFAULT_PROFILE,PROFILE_WORLDS,AVATAR_SIZE,PROFILE_BODY_LIMIT,appearancePatch,dailyCycle,rarityLabel};
+})();
 const duelModule = (()=>{
 const {Combate}=engine;
 
@@ -792,7 +893,7 @@ return {collisionBonus,collisionPower,createDuel,stepDuel};
 const {collisionBonus,collisionPower,createDuel,stepDuel}=duelModule;
 
 const game = (()=>{
-const {Combate,affinity}=engine;
+const {Combate,affinity}=engine; const {dailyCycle}=communityRules;
 
 const AREAS = [
   { id:'entrada', name:'Costa de Namek', description:'Patrulhas do império rondam o litoral.', levels:[1,3], unlock:1, enemy:'Soldado da Tropa Freeza', base:[150,18,9,9], color:'Roxo' },
@@ -1543,6 +1644,77 @@ function sellUnit(state, uid){
   return gold;
 }
 
+const MAX_RAID_ATTEMPTS=3;
+function raidDayHash(day){
+  let h=2166136261>>>0;
+  for(let i=0;i<day.length;i++){h^=day.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+  return h;
+}
+function dailyRaidBoss(day){
+  const index=raidDayHash(String(day??''))%WORLDS.length;
+  const world=WORLDS[index];
+  const boss=world.boss;
+  const atkScale=scale(38),defScale=scale(42);
+  const power=Math.round(boss.base[1]*atkScale);
+  return {
+    worldIndex:index,worldName:world.name,name:boss.name,color:boss.color,kind:boss.kind,
+    sprite:`enemy-${index+1}-5`,level:50,hp:10000000,
+    attack:power,magic:Math.round(power*.88),
+    defense:Math.round(boss.base[2]*defScale),resistance:Math.round(boss.base[3]*defScale),
+    scale:defScale,interval:3000,x:60,y:50
+  };
+}
+function dailyRaidState(state,now=Date.now()){
+  const {day,nextAt}=dailyCycle(now);
+  const boss=dailyRaidBoss(day);
+  const sameDay=state.raid?.day===day;
+  const attempts=sameDay?(state.raid.attempts??0):0;
+  return {
+    day,nextAt,boss,attempts,maxAttempts:MAX_RAID_ATTEMPTS,
+    remaining:Math.max(0,MAX_RAID_ATTEMPTS-attempts),
+    bestDamage:sameDay?(state.raid.bestDamage??0):0,
+    bestEver:state.raid?.bestEver??0,
+    lastRun:sameDay?(state.raid.lastRun??null):null
+  };
+}
+function challengeDailyRaid(state,now=Date.now()){
+  if(!state.team.length)return false;
+  const {day}=dailyCycle(now);
+  const bestEver=state.raid?.bestEver??0;
+  if(state.raid?.day!==day){
+    state.raid={day,attempts:0,bestDamage:0,bestEver,lastRun:null};
+  }
+  if(state.raid.attempts>=MAX_RAID_ATTEMPTS)return false;
+  const boss=dailyRaidBoss(day);
+  const leaderUnit=state.collection.find(u=>u.uid===state.leader);
+  const leaderCard=leaderUnit?CHARACTERS[leaderUnit.id]:null;
+  const playerTeam=state.team.map(uid=>fighter(state.collection.find(u=>u.uid===uid),state.positions[uid],leaderCard,true));
+  const result=new Combate([playerTeam,[{...boss}]],{mode:'equipe',limit:60000}).run();
+  const damageBySlot=playerTeam.map(()=>0);
+  let totalDamage=0;
+  for(const e of result.events){
+    if(e.type==='dano'&&e.target==='1:0'&&e.hp>0){
+      totalDamage+=e.hp;
+      if(e.actor?.startsWith('0:')){
+        const slot=Number(e.actor.slice(2));
+        if(slot>=0&&slot<damageBySlot.length)damageBySlot[slot]+=e.hp;
+      }
+    }
+  }
+  const damage=Math.round(totalDamage);
+  const reward=Math.round(60+Math.min(2500,Math.sqrt(damage)*6));
+  state.gold+=reward;
+  state.raid.attempts++;
+  state.raid.bestDamage=Math.max(state.raid.bestDamage??0,damage);
+  state.raid.bestEver=Math.max(state.raid.bestEver??0,damage);
+  state.raid.lastRun={
+    day,attempt:state.raid.attempts,damage,reward,seconds:result.seconds,
+    bossName:boss.name,bossColor:boss.color,
+    allies:playerTeam.map((u,i)=>({name:u.name,damage:Math.round(damageBySlot[i])}))
+  };
+  return state.raid.lastRun;
+}
+
 function applyGameAction(state,action,now){
   switch(action?.type){
     case 'nen': {
@@ -1620,106 +1792,16 @@ function applyGameAction(state,action,now){
     case 'autoFormation': return autoFormation(state,action.mode??'power',now);
     case 'formationPreset': return applyFormationPreset(state,action.preset);
     case 'sell': return sellUnit(state,action.uid)!==false;
+    case 'raid': return challengeDailyRaid(state,now)!==false;
     default: return false;
   }
 }
 
-return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction};
+return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,MAX_RAID_ATTEMPTS,dailyRaidBoss,dailyRaidState,challengeDailyRaid,applyGameAction};
 })();
-const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction}=game;
-const communityRules = (()=>{
-
-// A daily period is keyed by the local calendar date on which its noon began.
-const DAILY_ZONE='America/Sao_Paulo';
-const GIFT_GOLD=10;
-const PROFILE_OPTIONS={
-  background:{namek:'Namek · Dragon Ball',arlong:'Arlong Park · One Piece',konoha:'Konoha · Naruto',
-    seireitei:'Seireitei · Bleach',shibuya:'Shibuya · Jujutsu Kaisen',clover:'Reino Clover · Black Clover',
-    britannia:'Britannia · Nanatsu no Taizai',morioh:'Morioh · JoJo',heavens:'Heavens Arena · Hunter × Hunter',
-    cidadez:'Cidade Z · One Punch Man',noite:'Noite violeta',aurora:'Aurora turquesa'},
-  icon:{estrela:'Estrela',cometa:'Cometa',escudo:'Escudo'},
-  border:{menta:'Menta',violeta:'Violeta',ouro:'Ouro'},
-};
-const DEFAULT_PROFILE={background:'namek',icon:'estrela',border:'menta'};
-const PROFILE_WORLDS={namek:0,arlong:1,konoha:2,seireitei:3,shibuya:4,clover:5,britannia:6,morioh:7,heavens:8,cidadez:9};
-const AVATAR_SIZE=128;
-const PROFILE_BODY_LIMIT=100*1024;
-
-// The browser sends only its square canvas export, never a remote image URL.
-function validAvatar(value){
-  const prefix='data:image/png;base64,';
-  if(typeof value!=='string'||value.length>98000||!value.startsWith(prefix))return false;
-  const encoded=value.slice(prefix.length);
-  if(encoded.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))return false;
-  const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
-  const signature=[137,80,78,71,13,10,26,10];
-  if(bytes.length<57||!signature.every((b,i)=>bytes[i]===b))return false;
-  const view=new DataView(bytes.buffer);
-  let hasData=false;
-  for(let pos=8;pos+12<=bytes.length;){
-    const length=view.getUint32(pos);
-    const kind=String.fromCharCode(...bytes.subarray(pos+4,pos+8));
-    const end=pos+12+length;
-    if(end>bytes.length)return false;
-    if(pos===8){
-      if(kind!=='IHDR'||length!==13||view.getUint32(16)!==AVATAR_SIZE||view.getUint32(20)!==AVATAR_SIZE||
-          bytes[24]!==8||![2,6].includes(bytes[25])||bytes[26]||bytes[27]||bytes[28])return false;
-    }else if(kind==='IDAT')hasData ||= length>0;
-    else if(kind==='IEND')return hasData&&length===0&&end===bytes.length;
-    else if(!['sRGB','pHYs','cHRM','gAMA','iCCP','sBIT','cICP'].includes(kind))return false;
-    pos=end;
-  }
-  return false;
-}
-function appearancePatch(input){
-  const patch={};
-  for(const key of Object.keys(DEFAULT_PROFILE)){
-    if(typeof input?.[key]!=='string'||!Object.hasOwn(PROFILE_OPTIONS[key],input[key]))throw Error('Escolha as opções de aparência do perfil.');
-    patch[key]=input[key];
-  }
-  if(Object.hasOwn(input,'avatar')){
-    if(input.avatar!==null&&!validAvatar(input.avatar))throw Error('A foto precisa ser uma imagem válida. Escolha o arquivo novamente.');
-    patch.avatar=input.avatar;
-  }
-  return patch;
-}
-const localParts=new Intl.DateTimeFormat('en-GB',{
-  timeZone:DAILY_ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',
-  minute:'2-digit',second:'2-digit',hourCycle:'h23',
-});
-function localFields(time){
-  return Object.fromEntries(localParts.formatToParts(time).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
-}
-function localNoon(plainDate){
-  const desired=plainDate+12*3600000;
-  let time=desired;
-  for(let attempt=0;attempt<3;attempt++){
-    const f=localFields(time);
-    const actual=Date.UTC(f.year,f.month-1,f.day,f.hour,f.minute,f.second);
-    if(actual===desired)return time;
-    time+=desired-actual;
-  }
-  return time;
-}
-function dailyCycle(now=Date.now()){
-  const f=localFields(now);
-  const today=Date.UTC(f.year,f.month-1,f.day);
-  const startDate=today-(f.hour<12?86400000:0);
-  return {day:new Date(startDate).toISOString().slice(0,10),nextAt:localNoon(startDate+86400000)};
-}
-
-function rarityLabel(odds){
-  const format=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
-  for(const [divisor,suffix] of [[1e9,'B'],[1e6,'M'],[1e3,' mil']]){
-    if(odds>=divisor)return '1/'+format.format(odds/divisor)+suffix;
-  }
-  return '1/'+format.format(odds);
-}
-
-return {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,DEFAULT_PROFILE,PROFILE_WORLDS,AVATAR_SIZE,PROFILE_BODY_LIMIT,appearancePatch,dailyCycle,rarityLabel};
-})();
+const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,MAX_RAID_ATTEMPTS,dailyRaidBoss,dailyRaidState,challengeDailyRaid,applyGameAction}=game;
 const communityModule = (()=>{
-const {CHARACTERS,COLORS,spriteFor}=game; const {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,PROFILE_WORLDS,AVATAR_SIZE,rarityLabel}=communityRules;
+const {CHARACTERS,COLORS,spriteFor,dailyRaidBoss}=game; const {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,PROFILE_WORLDS,AVATAR_SIZE,rarityLabel}=communityRules;
 
 const tokenKey='nexus.community.access';
 const number=new Intl.NumberFormat('pt-BR');
@@ -1844,11 +1926,13 @@ function createCommunity({spriteURL,onSession,onChallenge}){
   }
   function rankArt(){
     if(!ranking)return empty('Carregando classificação…');
-    const list=ranking[section];
-    if(!list.length)return empty('Os primeiros recrutas e jogadores aparecerão aqui conforme as expedições avançarem.');
+    const list=ranking[section]??[];
+    if(!list.length)return empty(section==='raid'?'Nenhum explorador atacou o Chefe do dia neste ciclo ainda.':'Os primeiros recrutas e jogadores aparecerão aqui conforme as expedições avançarem.');
     return `<ol class="rank-list">${list.map((row,i)=>section==='rarity'?`
       <li class="rank-row"><span class="rank-number">${i+1}</span>${avatar(row)}
-        <div class="rank-description"><strong>${escape(row.name)}${row.shiny?' ✦':''}</strong><small>${row.trait?escape(row.trait)+' · ':''}#${String(row.serial).padStart(3,'0')} · ${namedPlayer(row.player)}</small></div>${odds(row)}</li>`:`
+        <div class="rank-description"><strong>${escape(row.name)}${row.shiny?' ✦':''}</strong><small>${row.trait?escape(row.trait)+' · ':''}#${String(row.serial).padStart(3,'0')} · ${namedPlayer(row.player)}</small></div>${odds(row)}</li>`:section==='raid'?`
+      <li class="rank-row"><span class="rank-number">${i+1}</span><div class="top-team">${row.units.map(avatar).join('')}</div>
+        <div class="rank-description">${namedPlayer(row.player)}<small>${row.units.map(u=>escape(u.name)).join(' · ')}</small></div><strong class="power-value">${number.format(row.damage)} dano</strong></li>`:`
       <li class="rank-row"><span class="rank-number">${i+1}</span><div class="top-team">${row.units.map(avatar).join('')}</div>
         <div class="rank-description">${namedPlayer(row.player)}<small>${row.units.map(u=>escape(u.name)).join(' · ')}</small></div><strong class="power-value">${number.format(row.power)}</strong></li>`).join('')}</ol>`;
   }
@@ -1880,10 +1964,11 @@ function createCommunity({spriteURL,onSession,onChallenge}){
         </div>`;
       return;
     }
+    const raidBoss=ranking?.raidDay?dailyRaidBoss(ranking.raidDay):null;
     body.innerHTML=`<div class="community-toolbar"><nav class="community-tabs" aria-label="Comunidade">
-      ${[['rarity','Raridade'],['power','Força'],['friends','Amigos']].map(([id,label])=>`<button class="ghost" data-community-tab="${id}" aria-pressed="${id===section}">${label}</button>`).join('')}</nav>
+      ${[['rarity','Raridade'],['power','Força'],['raid','Chefe do dia'],['friends','Amigos']].map(([id,label])=>`<button class="ghost" data-community-tab="${id}" aria-pressed="${id===section}">${label}</button>`).join('')}</nav>
       <div class="friend-actions"><button class="ghost" data-refresh>Atualizar</button><button class="ghost" data-my-profile>Meu perfil</button></div></div>
-      <p class="caption community-help">${section==='rarity'?'Personagens recrutados ordenados pela chance de obtenção.':section==='power'?'Soma dos atributos dos quatro personagens mais fortes do inventário, com Shiny e Traits.':'Um presente de '+number.format(friends?.giftGold??GIFT_GOLD)+' ouro por amigo a cada ciclo. Reset às 12h, horário de Brasília.'}</p>
+      <p class="caption community-help">${section==='rarity'?'Personagens recrutados ordenados pela chance de obtenção.':section==='power'?'Soma dos atributos dos quatro personagens mais fortes do inventário, com Shiny e Traits.':section==='raid'?(raidBoss?`Maior dano em 60 s contra ${escape(raidBoss.name)} (${escape(raidBoss.color)}) no ciclo ${escape(ranking.raidDay)}.`:'Maior dano em 60 s no Chefe do dia. Reset às 12h, horário de Brasília.'):'Um presente de '+number.format(friends?.giftGold??GIFT_GOLD)+' ouro por amigo a cada ciclo. Reset às 12h, horário de Brasília.'}</p>
       ${section==='friends'?'<p class="daily-clock">Próximo reset <strong data-reset-clock>—</strong></p>'+friendList():rankArt()}`;
     tick();
   }
@@ -1931,7 +2016,7 @@ function createCommunity({spriteURL,onSession,onChallenge}){
       <span class="player-emblem" aria-hidden="true">${emblem(attributes)}</span><div><h2 id="player-profile-title">${escape(profile.name)}</h2>
       <p>Código de amigo <strong>${profile.code}</strong></p></div></header>
       <div class="player-meta"><div><span>Tempo de jogo ativo</span><strong>${playTime(profile.playMs)}</strong></div>
-      <div><span>Encontros concluídos</span><strong>${number.format(profile.encounters)}</strong></div></div>
+      <div><span>Encontros concluídos</span><strong>${number.format(profile.encounters)}</strong></div>${profile.raidBestEver?`<div><span>Recorde na Raid</span><strong>${number.format(profile.raidBestEver)} dano</strong></div>`:''}</div>
       <div class="community-tabs"><button class="ghost" data-view="team" aria-pressed="${view==='team'}">Time atual</button>
       <button class="ghost" data-view="showcase" aria-pressed="${view==='showcase'}">Destaques</button></div>
       ${view==='showcase'?'<p class="caption">Até cinco personagens com menor chance de obtenção.</p>':''}
@@ -2156,8 +2241,9 @@ const {isUnreadableCampaign,saveKey,readCampaign,writeCampaign,packCampaign,unpa
 
 const $ = selector=>document.querySelector(selector);
 const int = new Intl.NumberFormat('pt-BR');
-const validTabs=['exploracao','formacao','colecao','configuracoes','upgrades','comunidade','arena','guia'];
+const validTabs=['exploracao','raid','formacao','colecao','configuracoes','upgrades','comunidade','arena','guia'];
 const time = milliseconds=>{const sec=Math.max(0,Math.ceil(milliseconds/1000));return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;};
+const clockHms = milliseconds=>{const sec=Math.max(0,Math.ceil(milliseconds/1000));return [Math.floor(sec/3600),Math.floor(sec/60)%60,sec%60].map(v=>String(v).padStart(2,'0')).join(':');};
 const copy=id=>state.collection.find(c=>c.uid===id);
 const card=id=>CHARACTERS[copy(id).id];
 const isPaused=()=>Boolean(state.paused??!state.running);
@@ -2697,6 +2783,16 @@ function floatTag(target,text,cls=''){
   const hit=document.createElement('span');hit.className='float'+(cls?' '+cls:'');hit.textContent=text;
   target.append(hit);setTimeout(()=>hit.remove(),780);
 }
+function renderRaidPanel(panel){
+  const now=gameNow();
+  const r=dailyRaidState(state,now);
+  const b=r.boss;
+  panel.innerHTML=`<div class="layout"><article class="card"><div class="swap"><div><h2>Chefe do dia · ${b.name}</h2><p class="caption">Mundo: ${b.worldName} · Reset às 12h (Brasília) · <span data-raid-clock data-next="${r.nextAt}">${clockHms(r.nextAt-now)}</span></p></div><span class="stat-pill">Tentativas: <strong>${r.remaining}/${r.maxAttempts}</strong></span></div>
+    <div class="raid-boss" style="--tone:${COLORS[b.color]}">${img(b.sprite)}<div><strong>${b.name}</strong><small><i class="color-dot" style="--hue:${COLORS[b.color]}"></i> Cor ${b.color} · ${teamAffinitySummary(b.color)}</small><small>Objetivo: causar o maior dano total em 60 s. Todos enfrentam os mesmos atributos hoje.</small></div></div>
+    <div class="formation-stats raid-stats"><span class="stat-pill">Melhor dano hoje: <strong>${int.format(r.bestDamage)}</strong></span><span class="stat-pill">Recorde geral: <strong>${int.format(r.bestEver)}</strong></span></div>
+    <button type="button" class="primary raid-go" id="raid-challenge" ${!state.team.length||r.remaining<=0?'disabled':''}>${!state.team.length?'Monte uma formação':r.remaining<=0?'Tentativas esgotadas hoje':`Atacar Chefe do dia (${r.remaining} restante${r.remaining>1?'s':''})`}</button></article>
+    <aside><article class="card"><h3>Última tentativa hoje</h3>${r.lastRun?`<p class="caption"><strong>${int.format(r.lastRun.damage)} dano</strong> · ${r.lastRun.seconds.toFixed(1)} s · +${int.format(r.lastRun.reward)} ouro</p><ul class="activity">${r.lastRun.allies.map(a=>`<li><span>${a.name}</span><b>${int.format(a.damage)} dano</b></li>`).join('')}</ul>`:'<p class="caption">Ajuste a afinidade de cor, o líder e a posição na Formação e faça até 3 tentativas por ciclo.</p>'}</article></aside></div>`;
+}
 function renderPanel(){
   renderWorldNav();
   collectionIndex=null;
@@ -2724,6 +2820,7 @@ function renderPanel(){
   }
   community?.hide();
   if(tab==='arena'){duelPanel(panel);return;}
+  if(tab==='raid'){renderRaidPanel(panel);return;}
   if(tab==='exploracao'){
     const level=maxLevel(state),world=worldOf(state),currentArea=world.areas[state.area];
     const toElite=state.area===2?(7-(state.index%7)):null;
@@ -2934,6 +3031,13 @@ document.addEventListener('click',e=>{
       if(ok&&formationSlots(state)[slot]===uid&&tab==='colecao'){pickSlot=null;tab='formacao';history.replaceState(null,'','#formacao');renderPanel();}
     });
   }
+  if(b.id==='raid-challenge'){
+    void transaction({type:'raid'}).then(ok=>{
+      if(!ok)return;
+      const run=state.raid?.lastRun;
+      if(run)note(`Chefe do dia: ${int.format(run.damage)} de dano (+${int.format(run.reward)} ouro).`);
+    });
+  }
   if(b.dataset.action==='boss')void transaction({type:'boss'});
   if(b.dataset.upgrade)void transaction({type:'upgrade',id:b.dataset.upgrade});
   if(b.dataset.publicUnit){
@@ -3038,6 +3142,14 @@ setInterval(()=>{
     const left=readyAt(state,el.dataset.recovery)-now;
     el.textContent=left>0?'Recupera em '+Math.ceil(left/1000)+' s':'';
   });
+  if(tab==='raid'){
+    const rc=$('#panel [data-raid-clock]');
+    if(rc){
+      const left=Number(rc.dataset.next)-now;
+      if(left<=0)renderPanel();
+      else rc.textContent=clockHms(left);
+    }
+  }
   if(tab==='exploracao'){
     drawScene(now);
     const boss=$('#panel [data-action="boss"]');
