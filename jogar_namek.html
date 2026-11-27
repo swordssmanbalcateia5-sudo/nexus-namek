@@ -271,6 +271,20 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
 .role-pill{background:var(--surface-alt);color:#d2d4df}
 .daily-clock{background:var(--surface);border-color:var(--line)}
 .topbar{border-bottom:1px solid var(--line);margin-bottom:4px}
+
+
+/* Missões diárias */
+.daily-card{margin-top:16px}
+.daily-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.daily-head .caption{margin-bottom:10px;font-variant-numeric:tabular-nums}
+.daily-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.daily-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:8px;background:var(--surface);border:1px solid var(--line)}
+.daily-bonus{border-color:#2d5a4b;background:#0f1916}
+.daily-info{flex:1;min-width:0}
+.daily-info strong{display:block;font-size:13px;font-weight:600}
+.daily-info small{display:block;color:var(--muted);font-size:12px;margin-top:2px;font-variant-numeric:tabular-nums}
+.daily-info .meter{margin:6px 0 4px}
+@media(max-width:560px){.daily-row{flex-direction:column;align-items:stretch}}
 </style>
 </head>
 <body>
@@ -687,6 +701,97 @@ class Combate {
 
 return {affinity,Combate};
 })();
+const communityRules = (()=>{
+
+// A daily period is keyed by the local calendar date on which its noon began.
+const DAILY_ZONE='America/Sao_Paulo';
+const GIFT_GOLD=10;
+const PROFILE_OPTIONS={
+  background:{namek:'Namek · Dragon Ball',arlong:'Arlong Park · One Piece',konoha:'Konoha · Naruto',
+    seireitei:'Seireitei · Bleach',shibuya:'Shibuya · Jujutsu Kaisen',clover:'Reino Clover · Black Clover',
+    britannia:'Britannia · Nanatsu no Taizai',morioh:'Morioh · JoJo',heavens:'Heavens Arena · Hunter × Hunter',
+    cidadez:'Cidade Z · One Punch Man',noite:'Noite violeta',aurora:'Aurora turquesa'},
+  icon:{estrela:'Estrela',cometa:'Cometa',escudo:'Escudo'},
+  border:{menta:'Menta',violeta:'Violeta',ouro:'Ouro'},
+};
+const DEFAULT_PROFILE={background:'namek',icon:'estrela',border:'menta'};
+const PROFILE_WORLDS={namek:0,arlong:1,konoha:2,seireitei:3,shibuya:4,clover:5,britannia:6,morioh:7,heavens:8,cidadez:9};
+const AVATAR_SIZE=128;
+const PROFILE_BODY_LIMIT=100*1024;
+
+// The browser sends only its square canvas export, never a remote image URL.
+function validAvatar(value){
+  const prefix='data:image/png;base64,';
+  if(typeof value!=='string'||value.length>98000||!value.startsWith(prefix))return false;
+  const encoded=value.slice(prefix.length);
+  if(encoded.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))return false;
+  const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
+  const signature=[137,80,78,71,13,10,26,10];
+  if(bytes.length<57||!signature.every((b,i)=>bytes[i]===b))return false;
+  const view=new DataView(bytes.buffer);
+  let hasData=false;
+  for(let pos=8;pos+12<=bytes.length;){
+    const length=view.getUint32(pos);
+    const kind=String.fromCharCode(...bytes.subarray(pos+4,pos+8));
+    const end=pos+12+length;
+    if(end>bytes.length)return false;
+    if(pos===8){
+      if(kind!=='IHDR'||length!==13||view.getUint32(16)!==AVATAR_SIZE||view.getUint32(20)!==AVATAR_SIZE||
+          bytes[24]!==8||![2,6].includes(bytes[25])||bytes[26]||bytes[27]||bytes[28])return false;
+    }else if(kind==='IDAT')hasData ||= length>0;
+    else if(kind==='IEND')return hasData&&length===0&&end===bytes.length;
+    else if(!['sRGB','pHYs','cHRM','gAMA','iCCP','sBIT','cICP'].includes(kind))return false;
+    pos=end;
+  }
+  return false;
+}
+function appearancePatch(input){
+  const patch={};
+  for(const key of Object.keys(DEFAULT_PROFILE)){
+    if(typeof input?.[key]!=='string'||!Object.hasOwn(PROFILE_OPTIONS[key],input[key]))throw Error('Escolha as opções de aparência do perfil.');
+    patch[key]=input[key];
+  }
+  if(Object.hasOwn(input,'avatar')){
+    if(input.avatar!==null&&!validAvatar(input.avatar))throw Error('A foto precisa ser uma imagem válida. Escolha o arquivo novamente.');
+    patch.avatar=input.avatar;
+  }
+  return patch;
+}
+const localParts=new Intl.DateTimeFormat('en-GB',{
+  timeZone:DAILY_ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',
+  minute:'2-digit',second:'2-digit',hourCycle:'h23',
+});
+function localFields(time){
+  return Object.fromEntries(localParts.formatToParts(time).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
+}
+function localNoon(plainDate){
+  const desired=plainDate+12*3600000;
+  let time=desired;
+  for(let attempt=0;attempt<3;attempt++){
+    const f=localFields(time);
+    const actual=Date.UTC(f.year,f.month-1,f.day,f.hour,f.minute,f.second);
+    if(actual===desired)return time;
+    time+=desired-actual;
+  }
+  return time;
+}
+function dailyCycle(now=Date.now()){
+  const f=localFields(now);
+  const today=Date.UTC(f.year,f.month-1,f.day);
+  const startDate=today-(f.hour<12?86400000:0);
+  return {day:new Date(startDate).toISOString().slice(0,10),nextAt:localNoon(startDate+86400000)};
+}
+
+function rarityLabel(odds){
+  const format=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
+  for(const [divisor,suffix] of [[1e9,'B'],[1e6,'M'],[1e3,' mil']]){
+    if(odds>=divisor)return '1/'+format.format(odds/divisor)+suffix;
+  }
+  return '1/'+format.format(odds);
+}
+
+return {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,DEFAULT_PROFILE,PROFILE_WORLDS,AVATAR_SIZE,PROFILE_BODY_LIMIT,appearancePatch,dailyCycle,rarityLabel};
+})();
 const duelModule = (()=>{
 const {Combate}=engine;
 
@@ -792,7 +897,7 @@ return {collisionBonus,collisionPower,createDuel,stepDuel};
 const {collisionBonus,collisionPower,createDuel,stepDuel}=duelModule;
 
 const game = (()=>{
-const {Combate,affinity}=engine;
+const {Combate,affinity}=engine; const {dailyCycle}=communityRules;
 
 const AREAS = [
   { id:'entrada', name:'Costa de Namek', description:'Patrulhas do império rondam o litoral.', levels:[1,3], unlock:1, enemy:'Soldado da Tropa Freeza', base:[150,18,9,9], color:'Roxo' },
@@ -1261,6 +1366,7 @@ function settle(state,battle){
     if(!battle.boss && ++state.streak>=3){if(state.area>0)state.area--;state.streak=0;}
   }
   state.log=[entry,...state.log].slice(0,25);
+  recordDailyBattle(state,battle,entry);
   return entry;
 }
 
@@ -1543,6 +1649,96 @@ function sellUnit(state, uid){
   return gold;
 }
 
+function previousCycleDay(day){
+  const t=Date.parse(day+'T00:00:00Z');
+  return Number.isFinite(t)?new Date(t-86400000).toISOString().slice(0,10):'';
+}
+function dayHash(day){
+  let h=2166136261>>>0;
+  for(let i=0;i<day.length;i++){h^=day.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+  return h;
+}
+function missionsForCycle(day,worldTier){
+  const scale=1+Math.max(0,worldTier)*0.85;
+  const h=dayHash(day);
+  const goldTarget=Math.round((120+(h%3)*30)*scale);
+  const thirdPool=[
+    {id:'gold',key:'gold',title:`Acumular ${goldTarget} ouro em vitórias`,target:goldTarget,reward:Math.round(90*scale)},
+    {id:'encounters',key:'encounters',title:'Concluir 20 encontros',target:20,reward:Math.round(80*scale)},
+    ...(worldTier>=1?[{id:'special',key:'special',title:'Derrotar 1 Elite ou Chefe',target:1,reward:Math.round(110*scale)}]:[]),
+  ];
+  const winTarget=10+(h%2)*5;
+  const recruitTarget=2+((h>>>2)%2);
+  return [
+    {id:'wins',key:'wins',title:`Vencer ${winTarget} encontros`,target:winTarget,reward:Math.round(70*scale)},
+    {id:'recruits',key:'recruits',title:`Encontrar ${recruitTarget} recrutas`,target:recruitTarget,reward:Math.round(95*scale)},
+    thirdPool[(h>>>4)%thirdPool.length],
+  ];
+}
+function ensureDaily(state,now){
+  const {day}=dailyCycle(now);
+  if(state.daily?.day===day){
+    state.daily.progress??={wins:0,encounters:0,recruits:0,gold:0,special:0};
+    state.daily.claimed??=[];
+    return state.daily;
+  }
+  const prev=state.daily;
+  const streak=prev?.lastFullDay===previousCycleDay(day)?(prev.streak??0):0;
+  state.daily={
+    day,worldTier:state.unlocked??0,
+    progress:{wins:0,encounters:0,recruits:0,gold:0,special:0},
+    claimed:[],streak,lastFullDay:prev?.lastFullDay??null
+  };
+  return state.daily;
+}
+function recordDailyBattle(state,battle,entry){
+  const d=ensureDaily(state,battle.end);
+  d.progress.encounters=(d.progress.encounters??0)+1;
+  if(entry.won){
+    d.progress.wins=(d.progress.wins??0)+1;
+    d.progress.gold=(d.progress.gold??0)+entry.gold;
+    if(battle.elite||battle.boss)d.progress.special=(d.progress.special??0)+1;
+    if(battle.recruit)d.progress.recruits=(d.progress.recruits??0)+1;
+  }
+}
+function dailyState(state,now=Date.now()){
+  const {day,nextAt}=dailyCycle(now);
+  const current=state.daily?.day===day?state.daily:null;
+  const worldTier=current?.worldTier??(state.unlocked??0);
+  const progress=current?.progress??{wins:0,encounters:0,recruits:0,gold:0,special:0};
+  const claimed=new Set(current?.claimed??[]);
+  const streak=current?(current.streak??0):(state.daily?.lastFullDay===previousCycleDay(day)?(state.daily.streak??0):0);
+  const missions=missionsForCycle(day,worldTier).map(m=>{
+    const value=Math.min(m.target,progress[m.key]??0);
+    return {...m,current:value,done:value>=m.target,claimed:claimed.has(m.id)};
+  });
+  const allDone=missions.every(m=>m.done);
+  const bonusClaimed=claimed.has('bonus');
+  const nextStreak=bonusClaimed?streak:streak+1;
+  const streakBoost=1+Math.min(.5,Math.max(0,nextStreak-1)*.1);
+  const bonusReward=Math.round(150*(1+worldTier*0.85)*streakBoost);
+  const claimableCount=missions.filter(m=>m.done&&!m.claimed).length+(allDone&&!bonusClaimed?1:0);
+  return {day,nextAt,streak,missions,allDone,bonusClaimed,bonusReward,claimableCount};
+}
+function claimDaily(state,id,now=Date.now()){
+  if(typeof id!=='string'||!id)return false;
+  const d=ensureDaily(state,now);
+  const view=dailyState(state,now);
+  if(id==='bonus'){
+    if(!view.allDone||view.bonusClaimed)return false;
+    state.gold+=view.bonusReward;
+    d.claimed.push('bonus');
+    d.streak=(d.streak??0)+1;
+    d.lastFullDay=d.day;
+    return view.bonusReward;
+  }
+  const mission=view.missions.find(m=>m.id===id);
+  if(!mission||!mission.done||mission.claimed)return false;
+  state.gold+=mission.reward;
+  d.claimed.push(mission.id);
+  return mission.reward;
+}
+
 function applyGameAction(state,action,now){
   switch(action?.type){
     case 'nen': {
@@ -1620,104 +1816,14 @@ function applyGameAction(state,action,now){
     case 'autoFormation': return autoFormation(state,action.mode??'power',now);
     case 'formationPreset': return applyFormationPreset(state,action.preset);
     case 'sell': return sellUnit(state,action.uid)!==false;
+    case 'claimDaily': return claimDaily(state,action.id,now)!==false;
     default: return false;
   }
 }
 
-return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction};
+return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,dailyState,claimDaily,applyGameAction};
 })();
-const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction}=game;
-const communityRules = (()=>{
-
-// A daily period is keyed by the local calendar date on which its noon began.
-const DAILY_ZONE='America/Sao_Paulo';
-const GIFT_GOLD=10;
-const PROFILE_OPTIONS={
-  background:{namek:'Namek · Dragon Ball',arlong:'Arlong Park · One Piece',konoha:'Konoha · Naruto',
-    seireitei:'Seireitei · Bleach',shibuya:'Shibuya · Jujutsu Kaisen',clover:'Reino Clover · Black Clover',
-    britannia:'Britannia · Nanatsu no Taizai',morioh:'Morioh · JoJo',heavens:'Heavens Arena · Hunter × Hunter',
-    cidadez:'Cidade Z · One Punch Man',noite:'Noite violeta',aurora:'Aurora turquesa'},
-  icon:{estrela:'Estrela',cometa:'Cometa',escudo:'Escudo'},
-  border:{menta:'Menta',violeta:'Violeta',ouro:'Ouro'},
-};
-const DEFAULT_PROFILE={background:'namek',icon:'estrela',border:'menta'};
-const PROFILE_WORLDS={namek:0,arlong:1,konoha:2,seireitei:3,shibuya:4,clover:5,britannia:6,morioh:7,heavens:8,cidadez:9};
-const AVATAR_SIZE=128;
-const PROFILE_BODY_LIMIT=100*1024;
-
-// The browser sends only its square canvas export, never a remote image URL.
-function validAvatar(value){
-  const prefix='data:image/png;base64,';
-  if(typeof value!=='string'||value.length>98000||!value.startsWith(prefix))return false;
-  const encoded=value.slice(prefix.length);
-  if(encoded.length%4!==0||!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded))return false;
-  const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
-  const signature=[137,80,78,71,13,10,26,10];
-  if(bytes.length<57||!signature.every((b,i)=>bytes[i]===b))return false;
-  const view=new DataView(bytes.buffer);
-  let hasData=false;
-  for(let pos=8;pos+12<=bytes.length;){
-    const length=view.getUint32(pos);
-    const kind=String.fromCharCode(...bytes.subarray(pos+4,pos+8));
-    const end=pos+12+length;
-    if(end>bytes.length)return false;
-    if(pos===8){
-      if(kind!=='IHDR'||length!==13||view.getUint32(16)!==AVATAR_SIZE||view.getUint32(20)!==AVATAR_SIZE||
-          bytes[24]!==8||![2,6].includes(bytes[25])||bytes[26]||bytes[27]||bytes[28])return false;
-    }else if(kind==='IDAT')hasData ||= length>0;
-    else if(kind==='IEND')return hasData&&length===0&&end===bytes.length;
-    else if(!['sRGB','pHYs','cHRM','gAMA','iCCP','sBIT','cICP'].includes(kind))return false;
-    pos=end;
-  }
-  return false;
-}
-function appearancePatch(input){
-  const patch={};
-  for(const key of Object.keys(DEFAULT_PROFILE)){
-    if(typeof input?.[key]!=='string'||!Object.hasOwn(PROFILE_OPTIONS[key],input[key]))throw Error('Escolha as opções de aparência do perfil.');
-    patch[key]=input[key];
-  }
-  if(Object.hasOwn(input,'avatar')){
-    if(input.avatar!==null&&!validAvatar(input.avatar))throw Error('A foto precisa ser uma imagem válida. Escolha o arquivo novamente.');
-    patch.avatar=input.avatar;
-  }
-  return patch;
-}
-const localParts=new Intl.DateTimeFormat('en-GB',{
-  timeZone:DAILY_ZONE,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',
-  minute:'2-digit',second:'2-digit',hourCycle:'h23',
-});
-function localFields(time){
-  return Object.fromEntries(localParts.formatToParts(time).filter(p=>p.type!=='literal').map(p=>[p.type,Number(p.value)]));
-}
-function localNoon(plainDate){
-  const desired=plainDate+12*3600000;
-  let time=desired;
-  for(let attempt=0;attempt<3;attempt++){
-    const f=localFields(time);
-    const actual=Date.UTC(f.year,f.month-1,f.day,f.hour,f.minute,f.second);
-    if(actual===desired)return time;
-    time+=desired-actual;
-  }
-  return time;
-}
-function dailyCycle(now=Date.now()){
-  const f=localFields(now);
-  const today=Date.UTC(f.year,f.month-1,f.day);
-  const startDate=today-(f.hour<12?86400000:0);
-  return {day:new Date(startDate).toISOString().slice(0,10),nextAt:localNoon(startDate+86400000)};
-}
-
-function rarityLabel(odds){
-  const format=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
-  for(const [divisor,suffix] of [[1e9,'B'],[1e6,'M'],[1e3,' mil']]){
-    if(odds>=divisor)return '1/'+format.format(odds/divisor)+suffix;
-  }
-  return '1/'+format.format(odds);
-}
-
-return {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,DEFAULT_PROFILE,PROFILE_WORLDS,AVATAR_SIZE,PROFILE_BODY_LIMIT,appearancePatch,dailyCycle,rarityLabel};
-})();
+const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,dailyState,claimDaily,applyGameAction}=game;
 const communityModule = (()=>{
 const {CHARACTERS,COLORS,spriteFor}=game; const {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,PROFILE_WORLDS,AVATAR_SIZE,rarityLabel}=communityRules;
 
@@ -2158,6 +2264,7 @@ const $ = selector=>document.querySelector(selector);
 const int = new Intl.NumberFormat('pt-BR');
 const validTabs=['exploracao','formacao','colecao','configuracoes','upgrades','comunidade','arena','guia'];
 const time = milliseconds=>{const sec=Math.max(0,Math.ceil(milliseconds/1000));return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;};
+const clockHms = milliseconds=>{const sec=Math.max(0,Math.ceil(milliseconds/1000));return [Math.floor(sec/3600),Math.floor(sec/60)%60,sec%60].map(v=>String(v).padStart(2,'0')).join(':');};
 const copy=id=>state.collection.find(c=>c.uid===id);
 const card=id=>CHARACTERS[copy(id).id];
 const isPaused=()=>Boolean(state.paused??!state.running);
@@ -2697,6 +2804,12 @@ function floatTag(target,text,cls=''){
   const hit=document.createElement('span');hit.className='float'+(cls?' '+cls:'');hit.textContent=text;
   target.append(hit);setTimeout(()=>hit.remove(),780);
 }
+function renderDailyCard(now){
+  const d=dailyState(state,now);
+  return `<article class="card daily-card"><div class="daily-head"><div><h3>Missões do dia</h3><p class="caption">Reset às 12h (Brasília) · <span data-daily-clock data-next="${d.nextAt}">${clockHms(d.nextAt-now)}</span>${d.streak?` · Sequência: ${d.streak} dia${d.streak>1?'s':''}`:''}</p></div>${d.claimableCount?`<span class="power-pill">${d.claimableCount} pronta${d.claimableCount>1?'s':''}</span>`:''}</div>
+  <ul class="daily-list">${d.missions.map(m=>`<li class="daily-row"><div class="daily-info"><strong>${m.title}</strong><div class="meter"><i style="width:${Math.min(100,m.current/Math.max(1,m.target)*100)}%"></i></div><small>${int.format(m.current)} / ${int.format(m.target)}</small></div><button type="button" class="${m.done&&!m.claimed?'primary':'ghost'}" data-claim-daily="${m.id}" ${!m.done||m.claimed?'disabled':''}>${m.claimed?'Resgatada':`+${int.format(m.reward)} ouro`}</button></li>`).join('')}
+  <li class="daily-row daily-bonus"><div class="daily-info"><strong>Bônus diário (3/3)</strong><small>${d.bonusClaimed?'Ciclo concluído hoje':d.allDone?'Pronto para resgatar':'Conclua as 3 missões para aumentar sua sequência'}</small></div><button type="button" class="${d.allDone&&!d.bonusClaimed?'primary':'ghost'}" data-claim-daily="bonus" ${!d.allDone||d.bonusClaimed?'disabled':''}>${d.bonusClaimed?'Resgatado':`+${int.format(d.bonusReward)} ouro`}</button></li></ul></article>`;
+}
 function renderPanel(){
   renderWorldNav();
   collectionIndex=null;
@@ -2729,7 +2842,7 @@ function renderPanel(){
     const toElite=state.area===2?(7-(state.index%7)):null;
     panel.innerHTML=`<div class="layout"><article class="card"><h2>Campanha</h2><p class="caption">${state.destination!==undefined?'Viagem após o combate atual.':`Mundo ${(state.world??0)+1} de ${WORLDS.length}`}</p>
     <div class="explore-meta"><label class="inline-toggle"><input type="checkbox" id="explore-auto-routes" ${state.autoRoutes?'checked':''}> Avançar áreas, chefes e mundos</label><span class="affinity-chip"><i class="color-dot" style="--hue:${COLORS[currentArea.color]}"></i> Contra <b>${currentArea.color}</b>: ${teamAffinitySummary(currentArea.color)}</span>${toElite!==null?`<span class="elite-chip">${toElite===1?'Próximo encontro: Elite':`Elite (${world.elite.name}) em ${toElite} lutas`}</span>`:''}</div>
-    <div class="area-list">${world.areas.map((a,i)=>`<button class="area-option" type="button" data-area="${i}" ${level<a.unlock?'disabled':''} aria-pressed="${state.area===i}"><span class="index-badge">${i+1}</span><span><strong>${a.name} <i class="color-dot" style="--hue:${COLORS[a.color]}" title="Cor do inimigo: ${a.color}"></i></strong><small>${a.description}</small></span><em>${level<a.unlock?`Libera no nv. ${a.unlock}`:`Nv. ${a.levels[0]}–${a.levels[1]}`}</em></button>`).join('')}</div></article><aside><article class="card boss"><h3>Chefe · ${world.boss.name} <small>Nv. ${world.boss.level}</small></h3><p class="caption boss-aff"><i class="color-dot" style="--hue:${COLORS[world.boss.color]}"></i> ${world.boss.color} · ${teamAffinitySummary(world.boss.color)}</p><div class="meter"><i style="width:${Math.min(100,state.finalWins/12*100)}%"></i></div><p class="caption">${state.completed?(state.world===9?'Campanha concluída.':'Próximo mundo disponível no menu de mundos.'):`${Math.min(12,state.finalWins)} / 12 vitórias em ${world.areas[2].name}`}</p><button class="primary" data-action="boss" ${!readyForBoss(state)||state.pending?'disabled':''}>${state.completed?'Chefe derrotado':state.pending?'Aguarde o fim da luta':'Desafiar chefe'}</button></article><article class="card"><h3>Últimos encontros</h3>${efficiencySummary()}<ul class="activity">${state.log.length?state.log.slice(0,4).map(e=>`<li><span>${e.label}${e.reserveXp?`<small>+${e.reserveXp} XP entre reservas</small>`:''}</span><b ${!e.won?'class="loss"':''}>${e.won?`+${int.format(e.gold)} ouro`:'Derrota'}</b></li>`).join(''):'<li>Seus resultados aparecem aqui.</li>'}</ul></article></aside></div>`;
+    <div class="area-list">${world.areas.map((a,i)=>`<button class="area-option" type="button" data-area="${i}" ${level<a.unlock?'disabled':''} aria-pressed="${state.area===i}"><span class="index-badge">${i+1}</span><span><strong>${a.name} <i class="color-dot" style="--hue:${COLORS[a.color]}" title="Cor do inimigo: ${a.color}"></i></strong><small>${a.description}</small></span><em>${level<a.unlock?`Libera no nv. ${a.unlock}`:`Nv. ${a.levels[0]}–${a.levels[1]}`}</em></button>`).join('')}</div></article><aside><article class="card boss"><h3>Chefe · ${world.boss.name} <small>Nv. ${world.boss.level}</small></h3><p class="caption boss-aff"><i class="color-dot" style="--hue:${COLORS[world.boss.color]}"></i> ${world.boss.color} · ${teamAffinitySummary(world.boss.color)}</p><div class="meter"><i style="width:${Math.min(100,state.finalWins/12*100)}%"></i></div><p class="caption">${state.completed?(state.world===9?'Campanha concluída.':'Próximo mundo disponível no menu de mundos.'):`${Math.min(12,state.finalWins)} / 12 vitórias em ${world.areas[2].name}`}</p><button class="primary" data-action="boss" ${!readyForBoss(state)||state.pending?'disabled':''}>${state.completed?'Chefe derrotado':state.pending?'Aguarde o fim da luta':'Desafiar chefe'}</button></article><article class="card"><h3>Últimos encontros</h3>${efficiencySummary()}<ul class="activity">${state.log.length?state.log.slice(0,4).map(e=>`<li><span>${e.label}${e.reserveXp?`<small>+${e.reserveXp} XP entre reservas</small>`:''}</span><b ${!e.won?'class="loss"':''}>${e.won?`+${int.format(e.gold)} ouro`:'Derrota'}</b></li>`).join(''):'<li>Seus resultados aparecem aqui.</li>'}</ul></article></aside></div>${renderDailyCard(gameNow())}`;
   }else if(tab==='formacao'){
     if(!state.team.includes(selected))selected=state.team[0];
     const slots=formationSlots(state);
@@ -2935,6 +3048,14 @@ document.addEventListener('click',e=>{
     });
   }
   if(b.dataset.action==='boss')void transaction({type:'boss'});
+  if(b.dataset.claimDaily){
+    const id=b.dataset.claimDaily;
+    const before=dailyState(state,gameNow());
+    const reward=id==='bonus'?before.bonusReward:(before.missions.find(m=>m.id===id)?.reward??0);
+    void transaction({type:'claimDaily',id}).then(ok=>{
+      if(ok)note(id==='bonus'?`Bônus diário resgatado (+${int.format(reward)} ouro).`:`Missão resgatada (+${int.format(reward)} ouro).`);
+    });
+  }
   if(b.dataset.upgrade)void transaction({type:'upgrade',id:b.dataset.upgrade});
   if(b.dataset.publicUnit){
     publicUnit=JSON.parse(b.dataset.publicUnit);profileUid=null;profileOpener=b;
@@ -3042,6 +3163,12 @@ setInterval(()=>{
     drawScene(now);
     const boss=$('#panel [data-action="boss"]');
     if(boss)boss.disabled=!readyForBoss(state)||!!state.pending||state.team.every(uid=>readyAt(state,uid)>now);
+    const dc=$('#panel [data-daily-clock]');
+    if(dc){
+      const left=Number(dc.dataset.next)-now;
+      if(left<=0)renderPanel();
+      else dc.textContent=clockHms(left);
+    }
   }
   community?.tick();
 },130);

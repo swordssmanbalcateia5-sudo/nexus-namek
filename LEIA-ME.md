@@ -18,7 +18,7 @@ O banco padrão fica em `data/nexus.sqlite`. O ouro, o inventário, os encontros
 - **Força** soma PV, Ataque, Magia, Defesa, Resistência e Velocidade dos quatro personagens com maior soma no inventário. Nível, Traits e Shiny entram na conta. Posição na formação e bônus de líder não entram.
 - **Perfil** tem tempo de jogo ativo, encontros concluídos, Time atual e Showcase automático com até cinco recrutados de maior raridade. O dono pode escolher o cenário de fundo, enviar uma foto para o avatar e escolher a borda.
 - **Amigos** permite convidar, aceitar, remover e enviar um presente por amigo a cada ciclo. Cada presente dá 10 de ouro, creditados de imediato. O histórico fica em **Presentes recebidos**.
-- **Horário global** usa o relógio do servidor. Cada ciclo começa ao meio-dia no fuso `America/Sao_Paulo`. Outros modos podem usar a mesma função `dailyCycle`.
+- **Horário global** usa o relógio do servidor. Cada ciclo começa ao meio-dia no fuso `America/Sao_Paulo`. Presentes e **Missões do dia** (três objetivos diários com bônus 3/3 e sequência de dias) usam a mesma função `dailyCycle`.
 
 ## Jogo solo e campanha
 
