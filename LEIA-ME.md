@@ -52,3 +52,7 @@ Abra **Arena → Começar duelo** para treinar com sua formação contra a equip
 Na Coleção, filtre a raridade e ordene por **Força no nível 100**. O potencial soma os seis atributos no nível 100, incluindo os modificadores da cópia. A autoformação usa essa projeção e também considera o bônus do líder e o critério escolhido.
 
 Na Comunidade, cada personagem tem uma sequência global para a versão normal e outra para a shiny. Vendas não liberam números. Na migração, as contas antigas recebem faixas por ordem de criação, mantendo a ordem de cada jogador dentro da faixa. O modo solo usa seriais locais.
+
+## Torre Infinita
+
+Após derrotar Boros no Mundo 10, a aba **Torre** libera combates 4×2 (andares 1–4), 4×3 (andares 5–9) e 4×4 (andares 10+) contra esquadrões determinísticos com bônus de líder. A primeira vitória em cada andar concede ouro (com bônus marco a cada 5 andares) e registra seu maior andar no ranking **Torre** da Comunidade.

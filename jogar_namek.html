@@ -271,6 +271,15 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
 .role-pill{background:var(--surface-alt);color:#d2d4df}
 .daily-clock{background:var(--surface);border-color:var(--line)}
 .topbar{border-bottom:1px solid var(--line);margin-bottom:4px}
+
+
+/* Torre Infinita */
+.tower-squad{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:10px 0 16px}
+.tower-foe{display:flex;align-items:center;gap:10px;padding:10px;border-radius:8px;background:var(--surface);border:1px solid var(--line);border-top:2px solid var(--tone)}
+.tower-foe img{width:46px;height:46px;object-fit:contain;image-rendering:pixelated;flex:none}
+.tower-foe strong{display:block;font-size:13px}
+.tower-foe small{display:block;color:var(--muted);font-size:12px;margin-top:2px;font-variant-numeric:tabular-nums}
+.tower-go{width:100%}
 </style>
 </head>
 <body>
@@ -289,6 +298,7 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
     <div class="game-main">
     <nav class="tabs" aria-label="Seções do jogo">
       <button type="button" data-tab="exploracao" aria-controls="panel">Exploração <b id="boss-ready-badge" class="tab-badge boss-badge" hidden>Chefe</b></button>
+      <button type="button" data-tab="torre" aria-controls="panel">Torre</button>
       <button type="button" data-tab="arena" aria-controls="panel">Arena</button>
       <button type="button" data-tab="formacao" aria-controls="panel">Formação</button>
       <button type="button" data-tab="colecao" aria-controls="panel">Coleção <b id="collection-count">4</b></button>
@@ -1543,6 +1553,73 @@ function sellUnit(state, uid){
   return gold;
 }
 
+function towerUnlocked(state){
+  return (state.world===9&&Boolean(state.completed))||Boolean(state.journey?.[9]?.completed);
+}
+function towerEncounter(floor){
+  const n=Math.max(1,Math.floor(floor));
+  const random=rng(0x544f5745,n);
+  const count=n<5?2:n<10?3:4;
+  const milestone=n%5===0;
+  const minTier=n<5?4:n<10?5:n<20?6:7;
+  const pool=Object.values(CHARACTERS).filter(c=>c.tier>=minTier);
+  const picked=[];
+  const used=new Set();
+  while(picked.length<count&&used.size<pool.length){
+    const c=pool[Math.floor(random()*pool.length)];
+    if(!used.has(c.id)){used.add(c.id);picked.push(c);}
+  }
+  const level=Math.min(100,94+n);
+  const xp=xpTo(level);
+  const mult=(1+(n-1)*0.08)*(milestone?1.15:1);
+  const enemyLeader=picked[0];
+  const enemies=picked.map((c,i)=>{
+    const f=fighter({uid:`tower-${n}-${i}`,id:c.id,xp,shiny:milestone&&i===0,trait:null},PRESET_COORDS.padrao[i],enemyLeader,true);
+    return {
+      ...f,
+      hp:Math.round(f.hp*mult*1.15),
+      attack:Math.round(f.attack*mult),
+      magic:Math.round(f.magic*mult),
+      defense:Math.round(f.defense*mult),
+      resistance:Math.round(f.resistance*mult),
+    };
+  });
+  const baseReward=Math.round(500*(1+n*0.25));
+  const milestoneBonus=milestone?Math.round(2500*(n/5)):0;
+  return {floor:n,count,milestone,enemies,baseReward,milestoneBonus,reward:baseReward+milestoneBonus};
+}
+function challengeTower(state){
+  if(!towerUnlocked(state)||!state.team.length)return false;
+  const floor=(state.tower?.bestFloor??0)+1;
+  const encounter=towerEncounter(floor);
+  const leaderUnit=state.collection.find(u=>u.uid===state.leader);
+  const leaderCard=leaderUnit?CHARACTERS[leaderUnit.id]:null;
+  const playerTeam=state.team.map(uid=>fighter(state.collection.find(u=>u.uid===uid),state.positions[uid],leaderCard,true));
+  const result=new Combate([playerTeam,encounter.enemies],{mode:'equipe'}).run();
+  const won=result.winner===0&&result.reason==='eliminação';
+  const damageBySlot=playerTeam.map(()=>0);
+  const fallen=new Set();
+  for(const e of result.events){
+    if(e.type==='dano'&&e.actor?.startsWith('0:')&&e.hp>0){
+      const slot=Number(e.actor.slice(2));
+      if(slot>=0&&slot<damageBySlot.length)damageBySlot[slot]+=e.hp;
+    }
+    if(e.type==='cai'&&e.actor?.startsWith('0:'))fallen.add(Number(e.actor.slice(2)));
+    if(['sobrevive','ressurge'].includes(e.type)&&e.actor?.startsWith('0:'))fallen.delete(Number(e.actor.slice(2)));
+  }
+  const tower=state.tower??={bestFloor:0,lastRun:null};
+  if(won){
+    tower.bestFloor=floor;
+    state.gold+=encounter.reward;
+  }
+  tower.lastRun={
+    floor,won,seconds:result.seconds,reward:won?encounter.reward:0,milestone:encounter.milestone,
+    enemies:encounter.enemies.map(e=>({id:e.id,name:e.name,color:e.color,role:e.role,level:e.level})),
+    allies:playerTeam.map((u,i)=>({name:u.name,damage:Math.round(damageBySlot[i]),alive:!fallen.has(i)}))
+  };
+  return tower.lastRun;
+}
+
 function applyGameAction(state,action,now){
   switch(action?.type){
     case 'nen': {
@@ -1620,13 +1697,14 @@ function applyGameAction(state,action,now){
     case 'autoFormation': return autoFormation(state,action.mode??'power',now);
     case 'formationPreset': return applyFormationPreset(state,action.preset);
     case 'sell': return sellUnit(state,action.uid)!==false;
+    case 'tower': return challengeTower(state)!==false;
     default: return false;
   }
 }
 
-return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction};
+return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,towerUnlocked,towerEncounter,challengeTower,applyGameAction};
 })();
-const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction}=game;
+const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,towerUnlocked,towerEncounter,challengeTower,applyGameAction}=game;
 const communityRules = (()=>{
 
 // A daily period is keyed by the local calendar date on which its noon began.
@@ -1844,11 +1922,13 @@ function createCommunity({spriteURL,onSession,onChallenge}){
   }
   function rankArt(){
     if(!ranking)return empty('Carregando classificação…');
-    const list=ranking[section];
-    if(!list.length)return empty('Os primeiros recrutas e jogadores aparecerão aqui conforme as expedições avançarem.');
+    const list=ranking[section]??[];
+    if(!list.length)return empty(section==='tower'?'Nenhum explorador avançou na Torre Infinita ainda.':'Os primeiros recrutas e jogadores aparecerão aqui conforme as expedições avançarem.');
     return `<ol class="rank-list">${list.map((row,i)=>section==='rarity'?`
       <li class="rank-row"><span class="rank-number">${i+1}</span>${avatar(row)}
-        <div class="rank-description"><strong>${escape(row.name)}${row.shiny?' ✦':''}</strong><small>${row.trait?escape(row.trait)+' · ':''}#${String(row.serial).padStart(3,'0')} · ${namedPlayer(row.player)}</small></div>${odds(row)}</li>`:`
+        <div class="rank-description"><strong>${escape(row.name)}${row.shiny?' ✦':''}</strong><small>${row.trait?escape(row.trait)+' · ':''}#${String(row.serial).padStart(3,'0')} · ${namedPlayer(row.player)}</small></div>${odds(row)}</li>`:section==='tower'?`
+      <li class="rank-row"><span class="rank-number">${i+1}</span><div class="top-team">${row.units.map(avatar).join('')}</div>
+        <div class="rank-description">${namedPlayer(row.player)}<small>${row.units.map(u=>escape(u.name)).join(' · ')}</small></div><strong class="power-value">Andar ${number.format(row.floor)}</strong></li>`:`
       <li class="rank-row"><span class="rank-number">${i+1}</span><div class="top-team">${row.units.map(avatar).join('')}</div>
         <div class="rank-description">${namedPlayer(row.player)}<small>${row.units.map(u=>escape(u.name)).join(' · ')}</small></div><strong class="power-value">${number.format(row.power)}</strong></li>`).join('')}</ol>`;
   }
@@ -1881,9 +1961,9 @@ function createCommunity({spriteURL,onSession,onChallenge}){
       return;
     }
     body.innerHTML=`<div class="community-toolbar"><nav class="community-tabs" aria-label="Comunidade">
-      ${[['rarity','Raridade'],['power','Força'],['friends','Amigos']].map(([id,label])=>`<button class="ghost" data-community-tab="${id}" aria-pressed="${id===section}">${label}</button>`).join('')}</nav>
+      ${[['rarity','Raridade'],['power','Força'],['tower','Torre'],['friends','Amigos']].map(([id,label])=>`<button class="ghost" data-community-tab="${id}" aria-pressed="${id===section}">${label}</button>`).join('')}</nav>
       <div class="friend-actions"><button class="ghost" data-refresh>Atualizar</button><button class="ghost" data-my-profile>Meu perfil</button></div></div>
-      <p class="caption community-help">${section==='rarity'?'Personagens recrutados ordenados pela chance de obtenção.':section==='power'?'Soma dos atributos dos quatro personagens mais fortes do inventário, com Shiny e Traits.':'Um presente de '+number.format(friends?.giftGold??GIFT_GOLD)+' ouro por amigo a cada ciclo. Reset às 12h, horário de Brasília.'}</p>
+      <p class="caption community-help">${section==='rarity'?'Personagens recrutados ordenados pela chance de obtenção.':section==='power'?'Soma dos atributos dos quatro personagens mais fortes do inventário, com Shiny e Traits.':section==='tower'?'Maior andar alcançado na Torre Infinita (combates 4×2 a 4×4 após o Mundo 10).':'Um presente de '+number.format(friends?.giftGold??GIFT_GOLD)+' ouro por amigo a cada ciclo. Reset às 12h, horário de Brasília.'}</p>
       ${section==='friends'?'<p class="daily-clock">Próximo reset <strong data-reset-clock>—</strong></p>'+friendList():rankArt()}`;
     tick();
   }
@@ -1931,7 +2011,7 @@ function createCommunity({spriteURL,onSession,onChallenge}){
       <span class="player-emblem" aria-hidden="true">${emblem(attributes)}</span><div><h2 id="player-profile-title">${escape(profile.name)}</h2>
       <p>Código de amigo <strong>${profile.code}</strong></p></div></header>
       <div class="player-meta"><div><span>Tempo de jogo ativo</span><strong>${playTime(profile.playMs)}</strong></div>
-      <div><span>Encontros concluídos</span><strong>${number.format(profile.encounters)}</strong></div></div>
+      <div><span>Encontros concluídos</span><strong>${number.format(profile.encounters)}</strong></div>${profile.towerFloor?`<div><span>Torre Infinita</span><strong>Andar ${number.format(profile.towerFloor)}</strong></div>`:''}</div>
       <div class="community-tabs"><button class="ghost" data-view="team" aria-pressed="${view==='team'}">Time atual</button>
       <button class="ghost" data-view="showcase" aria-pressed="${view==='showcase'}">Destaques</button></div>
       ${view==='showcase'?'<p class="caption">Até cinco personagens com menor chance de obtenção.</p>':''}
@@ -2156,7 +2236,7 @@ const {isUnreadableCampaign,saveKey,readCampaign,writeCampaign,packCampaign,unpa
 
 const $ = selector=>document.querySelector(selector);
 const int = new Intl.NumberFormat('pt-BR');
-const validTabs=['exploracao','formacao','colecao','configuracoes','upgrades','comunidade','arena','guia'];
+const validTabs=['exploracao','torre','formacao','colecao','configuracoes','upgrades','comunidade','arena','guia'];
 const time = milliseconds=>{const sec=Math.max(0,Math.ceil(milliseconds/1000));return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;};
 const copy=id=>state.collection.find(c=>c.uid===id);
 const card=id=>CHARACTERS[copy(id).id];
@@ -2697,6 +2777,22 @@ function floatTag(target,text,cls=''){
   const hit=document.createElement('span');hit.className='float'+(cls?' '+cls:'');hit.textContent=text;
   target.append(hit);setTimeout(()=>hit.remove(),780);
 }
+function renderTowerPanel(panel){
+  const unlocked=towerUnlocked(state);
+  const best=state.tower?.bestFloor??0;
+  if(!unlocked){
+    panel.innerHTML=`<article class="card"><h2>Torre Infinita</h2><p class="caption">Derrote Boros no Mundo 10 (One Punch Man) para liberar os combates 4×2 a 4×4 da Torre Infinita.</p><p class="caption">Mundos liberados: ${(state.unlocked??0)+1} / ${WORLDS.length}</p></article>`;
+    return;
+  }
+  const next=towerEncounter(best+1);
+  const last=state.tower?.lastRun;
+  panel.innerHTML=`<div class="layout"><article class="card"><div class="swap"><div><h2>Torre Infinita</h2><p class="caption">Recorde atual: Andar ${int.format(best)} · Próximo desafio: Andar ${int.format(next.floor)} (${state.team.length}×${next.count})</p></div>${next.milestone?'<span class="leader-pill">Andar marco</span>':''}</div>
+    <p class="caption">Recompensa da primeira vitória: <strong>+${int.format(next.reward)} ouro</strong>${next.milestoneBonus?` (${int.format(next.baseReward)} base + ${int.format(next.milestoneBonus)} marco)`:''}. A exploração da campanha continua em segundo plano.</p>
+    <h3>Esquadrão do Andar ${next.floor}</h3>
+    <div class="tower-squad">${next.enemies.map((e,i)=>`<div class="tower-foe" style="--tone:${COLORS[e.color]}">${img(e.sprite)}<div><strong>${e.name}${i===0?' (Líder)':''}</strong><small>Nv. ${e.level} · ${e.role} · ${e.color}</small><small>PV ${int.format(e.hp)} · Atq ${int.format(e.attack)} · Mag ${int.format(e.magic)}</small></div></div>`).join('')}</div>
+    <button type="button" class="primary tower-go" id="tower-challenge" ${!state.team.length?'disabled':''}>Desafiar Andar ${next.floor}</button></article>
+    <aside><article class="card"><h3>Última tentativa</h3>${last?`<p class="caption"><strong>Andar ${last.floor}</strong> · ${last.won?`Vitória (+${int.format(last.reward)} ouro)`:'Derrota'} · ${last.seconds.toFixed(1)} s</p><ul class="activity">${last.allies.map(a=>`<li><span>${a.name}<small>${a.alive?'Em pé':'Derrotado'}</small></span><b>${int.format(a.damage)} dano</b></li>`).join('')}</ul>`:'<p class="caption">Nenhum combate na Torre ainda.</p>'}</article></aside></div>`;
+}
 function renderPanel(){
   renderWorldNav();
   collectionIndex=null;
@@ -2724,6 +2820,7 @@ function renderPanel(){
   }
   community?.hide();
   if(tab==='arena'){duelPanel(panel);return;}
+  if(tab==='torre'){renderTowerPanel(panel);return;}
   if(tab==='exploracao'){
     const level=maxLevel(state),world=worldOf(state),currentArea=world.areas[state.area];
     const toElite=state.area===2?(7-(state.index%7)):null;
@@ -2932,6 +3029,14 @@ document.addEventListener('click',e=>{
     const uid=b.dataset.equip,slot=Number(b.dataset.slot);
     void transaction({type:'equip',uid,slot,replaced:b.dataset.occupant||null}).then(ok=>{
       if(ok&&formationSlots(state)[slot]===uid&&tab==='colecao'){pickSlot=null;tab='formacao';history.replaceState(null,'','#formacao');renderPanel();}
+    });
+  }
+  if(b.id==='tower-challenge'){
+    const targetFloor=(state.tower?.bestFloor??0)+1;
+    void transaction({type:'tower'}).then(ok=>{
+      if(!ok)return;
+      const run=state.tower?.lastRun;
+      if(run?.floor===targetFloor)note(run.won?`Andar ${run.floor} vencido! +${int.format(run.reward)} ouro.`:`Derrota no Andar ${run.floor}. Ajuste a formação e tente novamente.`);
     });
   }
   if(b.dataset.action==='boss')void transaction({type:'boss'});
