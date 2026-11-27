@@ -271,6 +271,13 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
 .role-pill{background:var(--surface-alt);color:#d2d4df}
 .daily-clock{background:var(--surface);border-color:var(--line)}
 .topbar{border-bottom:1px solid var(--line);margin-bottom:4px}
+
+
+/* Oficina de Traits e Despertar */
+.workshop-box{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:grid;gap:8px}
+.workshop-box h4{margin:0;font-size:13px;font-weight:600;color:var(--ink)}
+.workshop-box label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.workshop-actions{display:flex;flex-wrap:wrap;gap:8px}
 </style>
 </head>
 <body>
@@ -1091,9 +1098,10 @@ function fighter(unit, coords=[55,50], leader=null, tactical=false){
   const level=levelAt(unit.xp);
   const growth=scale(level);
   const trait=TRAITS.find(t=>t.name===unit.trait);
-  const [hp,attack,magic,defense,resistance,speed]=baseStats[card.tier-1].map((base,i)=>Math.round(Math.round(baseStats[0][i]+.7*(base-baseStats[0][i]))*(1+roles[card.role][i])*(1+(starterBonus[card.id]?.[i]||0))*(1+(trait?.buffs[i]||0))*(1+(leaderBuff(leader,card)[i]||0))*(i===5?1:growth*(unit.shiny?1.25:1))));
+  const stars=Math.max(0,Math.min(MAX_STARS,Math.floor(unit.stars??0)));
+  const [hp,attack,magic,defense,resistance,speed]=baseStats[card.tier-1].map((base,i)=>Math.round(Math.round(baseStats[0][i]+.7*(base-baseStats[0][i]))*(1+roles[card.role][i])*(1+(starterBonus[card.id]?.[i]||0))*(1+(trait?.buffs[i]||0))*(1+(leaderBuff(leader,card)[i]||0))*(i===5?1:growth*(unit.shiny?1.25:1)*(1+stars*.04))));
   const [x,y]=coords;
-  return {...card, uid:unit.uid,trait:unit.trait,nen:unit.trait==="Voto de Nen"&&unit.nen===true, level, x,y,hp,attack,magic,defense,resistance,speed,scale:growth,interval:tactical?Math.max(600,Math.round(300000/speed/100)*100):3000,magicBasic:card.role==='Mágico'||card.role==='Suporte',evade:unit.trait==='Instinto Superior'?3:0,survive:unit.trait==='Zenkai'?1:0,sprite:spriteFor(unit)};
+  return {...card, uid:unit.uid,trait:unit.trait,stars,nen:unit.trait==="Voto de Nen"&&unit.nen===true, level, x,y,hp,attack,magic,defense,resistance,speed,scale:growth,interval:tactical?Math.max(600,Math.round(300000/speed/100)*100):3000,magicBasic:card.role==='Mágico'||card.role==='Suporte',evade:unit.trait==='Instinto Superior'?3:0,survive:unit.trait==='Zenkai'?1:0,sprite:spriteFor(unit)};
 }
 
 function rng(seed,index){
@@ -1524,6 +1532,80 @@ function canSellUnit(state, uid){
   if(!uid||state.collection.length<=1||state.team.includes(uid))return false;
   return state.collection.some(u=>u.uid===uid);
 }
+const MAX_STARS=5;
+const TRAIT_ROLL_COSTS=[120,260,600,1500,4000,12000,35000,90000];
+function traitRollCost(unit){
+  const tier=CHARACTERS[unit?.id]?.tier;
+  return tier?(TRAIT_ROLL_COSTS[tier-1]??0):0;
+}
+function awakenCost(unit){
+  const tier=CHARACTERS[unit?.id]?.tier;
+  const stars=Math.max(0,Math.floor(unit?.stars??0));
+  if(!tier||stars>=MAX_STARS)return null;
+  return Math.round(SALE_PRICES[tier-1]*3*(stars+1));
+}
+function awakenMaterials(state,targetUid){
+  const target=state.collection.find(u=>u.uid===targetUid);
+  if(!target||(target.stars??0)>=MAX_STARS)return [];
+  const teamSet=new Set(state.team);
+  return state.collection.filter(u=>u.uid!==targetUid&&u.id===target.id&&!teamSet.has(u.uid));
+}
+function pickGuaranteedTrait(random){
+  const total=TRAITS.reduce((sum,t)=>sum+1/t.odds,0);
+  let p=random()*total;
+  for(const t of TRAITS){p-=1/t.odds;if(p<=0)return t;}
+  return TRAITS.at(-1);
+}
+function rollTrait(state,uid){
+  if(typeof uid!=='string'||state.pendingTrait)return false;
+  const unit=state.collection.find(u=>u.uid===uid);
+  if(!unit)return false;
+  const cost=traitRollCost(unit);
+  if(state.gold<cost)return false;
+  state.gold-=cost;
+  state.traitRolls=(state.traitRolls??0)+1;
+  const random=rng(state.seed??1,0x54524149^state.traitRolls);
+  const picked=pickGuaranteedTrait(random);
+  state.pendingTrait={uid:unit.uid,previous:unit.trait??null,candidate:picked.name};
+  return state.pendingTrait;
+}
+function resolveTrait(state,keep){
+  if(typeof keep!=='boolean'||!state.pendingTrait)return false;
+  const {uid,candidate}=state.pendingTrait;
+  const unit=state.collection.find(u=>u.uid===uid);
+  delete state.pendingTrait;
+  if(!unit)return false;
+  if(!keep){
+    if(unit.trait==='Voto de Nen'&&candidate!=='Voto de Nen')delete unit.nen;
+    unit.trait=candidate;
+  }
+  return true;
+}
+function awakenUnit(state,uid,materialUid){
+  if(typeof uid!=='string'||typeof materialUid!=='string'||uid===materialUid)return false;
+  const target=state.collection.find(u=>u.uid===uid);
+  const material=state.collection.find(u=>u.uid===materialUid);
+  if(!target||!material||target.id!==material.id||state.team.includes(materialUid))return false;
+  const cost=awakenCost(target);
+  if(cost===null||state.gold<cost)return false;
+  hydrateAwayRecruits(state);
+  const index=state.collection.findIndex(u=>u.uid===materialUid);
+  state.collection.splice(index,1);
+  state.gold-=cost;
+  target.stars=(target.stars??0)+1;
+  delete state.positions?.[materialUid];
+  if(state.recovery)delete state.recovery[materialUid];
+  if(state.pendingTrait?.uid===materialUid)delete state.pendingTrait;
+  if(state.awayWindow&&index<state.awayWindow.firstRecruit)state.awayWindow.firstRecruit--;
+  if(Array.isArray(state.awayReports)){
+    for(const r of state.awayReports){
+      if(index<r.firstRecruit)r.firstRecruit--;
+      if(index<r.lastRecruit)r.lastRecruit--;
+    }
+  }
+  return target.stars;
+}
+
 function sellUnit(state, uid){
   if(!canSellUnit(state,uid))return false;
   hydrateAwayRecruits(state);
@@ -1533,6 +1615,7 @@ function sellUnit(state, uid){
   state.gold+=gold;
   delete state.positions?.[uid];
   if(state.recovery)delete state.recovery[uid];
+  if(state.pendingTrait?.uid===uid)delete state.pendingTrait;
   if(state.awayWindow&&index<state.awayWindow.firstRecruit)state.awayWindow.firstRecruit--;
   if(Array.isArray(state.awayReports)){
     for(const r of state.awayReports){
@@ -1620,13 +1703,16 @@ function applyGameAction(state,action,now){
     case 'autoFormation': return autoFormation(state,action.mode??'power',now);
     case 'formationPreset': return applyFormationPreset(state,action.preset);
     case 'sell': return sellUnit(state,action.uid)!==false;
+    case 'rollTrait': return rollTrait(state,action.uid)!==false;
+    case 'resolveTrait': return resolveTrait(state,action.keep);
+    case 'awaken': return awakenUnit(state,action.uid,action.materialUid)!==false;
     default: return false;
   }
 }
 
-return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction};
+return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,MAX_STARS,TRAIT_ROLL_COSTS,traitRollCost,awakenCost,awakenMaterials,rollTrait,resolveTrait,awakenUnit,sellUnit,applyGameAction};
 })();
-const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,sellUnit,applyGameAction}=game;
+const {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,advanceWithPresence,startExploration,challenge,formationSlots,formationCost,equip,unitPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,canSellUnit,MAX_STARS,TRAIT_ROLL_COSTS,traitRollCost,awakenCost,awakenMaterials,rollTrait,resolveTrait,awakenUnit,sellUnit,applyGameAction}=game;
 const communityRules = (()=>{
 
 // A daily period is keyed by the local calendar date on which its noon began.
@@ -1834,8 +1920,8 @@ function createCommunity({spriteURL,onSession,onChallenge}){
     await loadSection();
   }
   function avatar(unit){
-    const {id,xp,shiny,trait,serial,odds}=unit;
-    const data=escape(JSON.stringify({id,xp,shiny,trait,serial,odds}));
+    const {id,xp,shiny,trait,stars,serial,odds}=unit;
+    const data=escape(JSON.stringify({id,xp,shiny,trait,stars:stars??0,serial,odds}));
     const card=CHARACTERS[unit.id];
     return `<button class="unit-portrait" type="button" data-public-unit="${data}" aria-label="Ficha de ${escape(card.name)}"><img class="community-sprite" src="${spriteURL(spriteFor(unit))}" alt="" style="--unit-color:${COLORS[card.color]}"></button>`;
   }
@@ -2428,7 +2514,8 @@ function transaction(action,offline=false){
 
 function unitSummary(unit){
   const c=CHARACTERS[unit.id];
-  return `<span class="member">${img(spriteFor(unit))}<span class="unit-summary"><strong>${c.name}${unit.shiny?' ✦':''}</strong><small>${TIERS[c.tier-1]} · ${c.color} · Nv. ${levelAt(unit.xp)} · ${serial(unit)}</small></span></span>`;
+  const stars=Math.max(0,Math.floor(unit.stars??0));
+  return `<span class="member">${img(spriteFor(unit))}<span class="unit-summary"><strong>${c.name}${unit.shiny?' ✦':''}${stars?` ★${stars}`:''}</strong><small>${TIERS[c.tier-1]} · ${c.color} · Nv. ${levelAt(unit.xp)} · ${serial(unit)}</small></span></span>`;
 }
 
 let chartColor='Vermelho',chartMode='ataque';
@@ -2457,6 +2544,7 @@ function traitEffects(trait){
   if(trait.passive)effects.push(trait.passive);
   return effects;
 }
+let awakenPick='';
 function renderProfile(){
   const unit=publicUnit??copy(profileUid);
   if(!unit){$('#character-profile').close();return;}
@@ -2466,9 +2554,16 @@ function renderProfile(){
   const xp=xpProgress(unit.xp,publicUnit?100:levelCap(state));
   const trait=TRAITS.find(t=>t.name===unit.trait);
   const bonuses=traitEffects(trait);
+  const pending=state.pendingTrait;
+  const pendingHere=!publicUnit&&pending?.uid===unit.uid?pending:null;
+  const candidateTrait=pendingHere?TRAITS.find(t=>t.name===pendingHere.candidate):null;
+  const rollCost=traitRollCost(unit);
+  const nextAwaken=publicUnit?null:awakenCost(unit);
+  const materials=publicUnit?[]:awakenMaterials(state,unit.uid);
+  if(!materials.some(m=>m.uid===awakenPick))awakenPick=materials[0]?.uid??'';
   const content=`<header class="profile-title" style="--tone:${COLORS[stats.color]}">
     ${img(stats.sprite)}
-    <div><p class="smallcaps">${stats.universe}</p><h2 id="profile-title">${stats.name}</h2>
+    <div><p class="smallcaps">${stats.universe}</p><h2 id="profile-title">${stats.name}${stats.stars?` · ★${stats.stars}`:''}</h2>
     <p>${TIERS[stats.tier-1]} · ${stats.color} · ${stats.role} · ${unit.shiny?'Shiny':'Normal'}</p>
     <p>Força no nível 100 · ${int.format(projectedPower(unit))}</p><p><b>Serial ${publicUnit||community?.active()?'global':'local'} ${serial(unit)}</b> · ${publicUnit?'Comunidade':inTeam?'Formação principal':'Reserva'}${state.leader===unit.uid?' · Líder':''}</p></div>
   </header>
@@ -2488,9 +2583,12 @@ function renderProfile(){
     <section class="card"><h3>Trait</h3><p>${unit.trait??'Sem Trait'}</p>${trait?`<p>${trait.rarity} · 1 em ${int.format(trait.odds)} recrutáveis</p>`:''}
       ${!publicUnit&&unit.trait==='Voto de Nen'?`<button class="ghost" data-nen="${unit.uid}" ${inTeam&&!unit.nen&&formationCost(state)>=4?'disabled':''}>${unit.nen?'Desativar Última Aposta':inTeam&&formationCost(state)>=4?'Libere uma vaga para ativar':'Ativar Última Aposta'}</button>`:''}
       ${bonuses.length?`<ul>${bonuses.map(bonus=>`<li>${bonus}</li>`).join('')}</ul>`:''}
+      ${!publicUnit?`<div class="workshop-box"><h4>Oficina de Traits</h4>${pendingHere?`<p>Nova Trait sorteada: <strong>${candidateTrait?.name??pendingHere.candidate}</strong>${candidateTrait?` (${candidateTrait.rarity} · 1/${int.format(candidateTrait.odds)})`:''}</p>${candidateTrait?`<ul>${traitEffects(candidateTrait).map(b=>`<li>${b}</li>`).join('')}</ul>`:''}<div class="workshop-actions"><button type="button" class="primary" data-resolve-trait="apply">Aplicar nova</button><button type="button" class="ghost" data-resolve-trait="keep">Manter ${unit.trait??'Sem Trait'}</button></div>`:pending?`<p class="caption">Resolva primeiro a Trait pendente de ${CHARACTERS[copy(pending.uid)?.id]?.name??'outro personagem'}.</p>`:`<button type="button" class="ghost" data-roll-trait="${unit.uid}" ${state.gold<rollCost?'disabled':''}>Sortear nova Trait (${int.format(rollCost)} ouro)</button><p class="caption">Você escolhe manter a atual ou aplicar a sorteada. A raridade de encontro não muda.</p>`}</div>`:''}
     </section>
-    <section class="card"><h3>Recrutamento</h3><p>${unit.odds?`Chance registrada no encontro · 1 em ${int.format(unit.odds)}`:'Integrante inicial'}</p>
+    <section class="card"><h3>Recrutamento e Despertar</h3><p>${unit.odds?`Chance registrada no encontro · 1 em ${int.format(unit.odds)}`:'Integrante inicial'}</p>
       ${unit.shiny?'<p class="caption">Shiny concede +25% a PV, Ataque, Magia, Defesa e Resistência.</p>':''}
+      <p><strong>Despertar: ★${stats.stars} / ${MAX_STARS}</strong>${stats.stars?` (+${stats.stars*4}% nos 5 atributos base)`:' (+4% por estrela)'}</p>
+      ${!publicUnit&&nextAwaken!==null?`<div class="workshop-box">${materials.length?`<label>Cópia para fundir <select id="awaken-material">${materials.map(m=>`<option value="${m.uid}" ${m.uid===awakenPick?'selected':''}>${serial(m)} · Nv. ${levelAt(m.xp)}${m.shiny?' · Shiny':''}${m.trait?` · ${m.trait}`:''}</option>`).join('')}</select></label><button type="button" class="primary" data-awaken="${unit.uid}" ${state.gold<nextAwaken?'disabled':''}>Despertar ★${stats.stars+1} (${int.format(nextAwaken)} ouro)</button>`:'<p class="caption">Recrute outra cópia reserva deste personagem para despertar.</p>'}</div>`:!publicUnit?'<p class="caption">Despertar máximo alcançado.</p>':''}
     </section>
   </div>`;
   if(content===profileContent)return;
@@ -2903,6 +3001,29 @@ document.addEventListener('click',e=>{
   if(b.id==='import-save')$('#save-file').click();
   if(b.dataset.tab){tab=b.dataset.tab;pickSlot=null;history.replaceState(null,'',`#${tab}`);renderPanel();return;}
   if(b.dataset.nen){const u=copy(b.dataset.nen);if(u)void transaction({type:'nen',uid:u.uid,enabled:!u.nen});}
+  if(b.dataset.rollTrait){
+    const u=copy(b.dataset.rollTrait);
+    if(u)void transaction({type:'rollTrait',uid:u.uid});
+  }
+  if(b.dataset.resolveTrait){
+    const keep=b.dataset.resolveTrait==='keep';
+    void transaction({type:'resolveTrait',keep}).then(ok=>{
+      if(ok)note(keep?'Trait original mantida.':'Nova Trait aplicada.');
+    });
+  }
+  if(b.dataset.awaken){
+    const u=copy(b.dataset.awaken);
+    const mat=copy($('#awaken-material')?.value||awakenPick);
+    if(u&&mat){
+      const cost=awakenCost(u),c=CHARACTERS[u.id];
+      const msg=`Fundir ${c.name} ${serial(mat)}${mat.shiny?' Shiny':''}${mat.trait?` (${mat.trait})`:''} por ${int.format(cost)} ouro para despertar ★${(u.stars??0)+1}? A cópia fundida será consumida.`;
+      if(confirm(msg)){
+        void transaction({type:'awaken',uid:u.uid,materialUid:mat.uid}).then(ok=>{
+          if(ok)note(`${c.name} despertou para ★${copy(u.uid)?.stars??(u.stars??0)+1}.`);
+        });
+      }
+    }
+  }
   if(b.dataset.color||b.dataset.mode){
     if(b.dataset.color)chartColor=b.dataset.color;else chartMode=b.dataset.mode;
     const attribute=b.dataset.color?'color':'mode';renderPanel();document.querySelector(`[data-${attribute}="${b.dataset[attribute]}"]`)?.focus();
@@ -2964,6 +3085,7 @@ document.addEventListener('change',e=>{const target=e.target;
   if(target.id==='auto-routes')changeSetting(target,{type:'autoRoutes',enabled:target.checked});
   if(target.id==='explore-auto-routes')void transaction({type:'autoRoutes',enabled:target.checked});
   if(target.id==='auto-form-mode'){autoFormMode=target.value;return;}
+  if(target.id==='awaken-material'){awakenPick=target.value;return;}
   if(target.id==='col-sort'){colFilter.sort=target.value;renderCollectionGrid();return;}
   if(target.id==='col-role'){colFilter.role=target.value;renderCollectionGrid();return;}
   if(target.id==='col-tier'){colFilter.tier=target.value;renderCollectionGrid();return;}

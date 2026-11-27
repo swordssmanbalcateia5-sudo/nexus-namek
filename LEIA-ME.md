@@ -52,3 +52,9 @@ Abra **Arena → Começar duelo** para treinar com sua formação contra a equip
 Na Coleção, filtre a raridade e ordene por **Força no nível 100**. O potencial soma os seis atributos no nível 100, incluindo os modificadores da cópia. A autoformação usa essa projeção e também considera o bônus do líder e o critério escolhido.
 
 Na Comunidade, cada personagem tem uma sequência global para a versão normal e outra para a shiny. Vendas não liberam números. Na migração, as contas antigas recebem faixas por ordem de criação, mantendo a ordem de cada jogador dentro da faixa. O modo solo usa seriais locais.
+
+## Oficina de Traits e Despertar
+
+Na ficha de qualquer personagem da coleção:
+- **Oficina de Traits**: gaste ouro (escalado por raridade) para sortear uma nova Trait e decida se deseja **Aplicar nova** ou **Manter** a atual. A chance de encontro original (`odds`) do ranking de Raridade permanece inalterada.
+- **Despertar (★1–★5)**: funda uma cópia reserva do mesmo personagem com ouro para ganhar **+4% por estrela** (até `+20%`) em PV, Ataque, Magia, Defesa e Resistência.
