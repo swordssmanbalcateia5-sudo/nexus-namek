@@ -478,7 +478,7 @@ async function exportCampaign(){
   if(community?.active())return;
   const url=URL.createObjectURL(new Blob([packCampaign(state)],{type:'application/json'}));
   const link=document.createElement('a');
-  link.href=url;link.download='nexus-progresso-'+new Date().toISOString().slice(0,10)+'.json';
+  link.href=url;link.download='alca-rng-progresso-'+new Date().toISOString().slice(0,10)+'.json';
   link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 async function importCampaign(file){
@@ -494,7 +494,7 @@ async function importCampaign(file){
     };
     transactionQueue=transactionQueue.then(()=>navigator.locks?navigator.locks.request(saveKey,restore):restore()).catch(()=>note('O navegador não conseguiu gravar o backup.'));
     await transactionQueue;
-  }catch{note('Não foi possível ler este backup do Nexus. A campanha atual foi preservada.');}
+  }catch{note('Não foi possível ler este backup do Alca RNG. A campanha atual foi preservada.');}
 }
 function receive(entries,offline=false){
   if(!entries.length)return;

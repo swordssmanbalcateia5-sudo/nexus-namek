@@ -59,7 +59,7 @@ export function unpackCampaign(text, characters, worlds) {
         typeof value === 'string' && /[<>"&]/.test(value)) throw Error('Conteúdo inválido no backup.');
     return value;
   });
-  if (file?.game !== 'nexus-namek' || file.format !== 1) throw Error('Escolha um backup de campanha do Nexus.');
+  if (file?.game !== 'nexus-namek' || file.format !== 1) throw Error('Escolha um backup de campanha do Alca RNG.');
   const s = parseCampaign(JSON.stringify(file.campaign));
   const validUnit = u => u && Object.hasOwn(characters, u.id) && typeof u.uid==='string' &&
     /^[\w-]+$/.test(u.uid) && Number.isFinite(u.xp) && u.xp>=0 &&

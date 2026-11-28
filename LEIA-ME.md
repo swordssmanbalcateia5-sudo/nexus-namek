@@ -1,4 +1,4 @@
-# Nexus · Campanha dos mundos
+# Alca RNG · Campanha dos mundos
 
 ## Testar com duas contas
 

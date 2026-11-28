@@ -97,20 +97,20 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
       if(!response.ok){
         const data=isJson?await response.json().catch(()=>null):null;
         const reference=[data?.code,data?.ray??response.headers.get('CF-Ray')].filter(Boolean).join(' · ');
-        const error=new Error((data?.error??'O servidor Nexus respondeu com HTTP '+response.status+'.')+(reference?' Referência: '+reference:''));
+        const error=new Error((data?.error??'O servidor do Alca RNG respondeu com HTTP '+response.status+'.')+(reference?' Referência: '+reference:''));
         error.status=response.status;
         if(path==='/game'&&[502,503,504].includes(response.status))conservativeRecoveryUntil=Date.now()+120000;
         if(path==='/game'&&([429,502,503,504].includes(response.status)||data?.code==='SYNC_CONTENTION'))deferSync(error,response.headers.get('Retry-After'));
         throw error;
       }
-      if(!isJson)throw Error('O servidor Nexus respondeu em um formato inesperado (HTTP '+response.status+').');
+      if(!isJson)throw Error('O servidor do Alca RNG respondeu em um formato inesperado (HTTP '+response.status+').');
       const data=await response.json();
       if(path==='/game'){syncFailures=0;syncRetryAt=0;syncError=null;}
       return data;
     }catch(error){
       if(controller.signal.aborted||error instanceof TypeError){
         const connectionError=new Error(controller.signal.aborted?'O servidor demorou para responder. Tente novamente.':
-          'O navegador não conseguiu acessar o servidor Nexus. Verifique a conexão.');
+          'O navegador não conseguiu acessar o servidor do Alca RNG. Verifique a conexão.');
         if(path==='/game'){
           if(controller.signal.aborted)conservativeRecoveryUntil=Date.now()+120000;
           deferSync(connectionError);
@@ -210,7 +210,7 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
   }
   function render(){
     if(!supported){
-      body.innerHTML=empty('Abra a versão servida pelo Nexus para jogar com outras contas. Este arquivo abre o jogo solo.');
+      body.innerHTML=empty('Abra a versão online do Alca RNG para jogar com outras contas. Este arquivo abre o jogo solo.');
       return;
     }
     if(!me){
