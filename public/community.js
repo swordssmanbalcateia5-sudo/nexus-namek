@@ -17,7 +17,7 @@ function playTime(ms){
   return `${Math.floor(minutes/60)} h ${minutes%60} min`;
 }
 function odds(unit){
-  return unit.odds?`<strong class="rarity-value" title="1 em ${number.format(unit.odds)}">${rarityLabel(unit.odds)}</strong>`:'';
+  return unit.odds?`<strong class="rarity-value" title="1 em ${number.format(unit.odds)} ${unit.oddsBasis==='recruitable'?'recrutáveis':'encontros comuns (registro anterior)'}">${rarityLabel(unit.odds)}</strong>`:'';
 }
 const empty=text=>`<p class="community-empty">${text}</p>`;
 
@@ -225,7 +225,7 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
     body.innerHTML=`<div class="community-toolbar"><nav class="community-tabs" aria-label="Comunidade">
       ${[['rarity','Raridade'],['power','Força'],['raid','Raid'],['tower','Torre'],['arena','Arena'],['friends','Amigos']].map(([id,label])=>`<button class="ghost" data-community-tab="${id}" aria-pressed="${id===section}">${label}</button>`).join('')}</nav>
       <div class="friend-actions">${authButtons('Vincular')} <button class="ghost" data-refresh>Atualizar</button><button class="ghost" data-my-profile>Meu perfil</button></div></div>
-      <p class="caption community-help">${section==='arena'?'Top 30 por pontos acumulados em duelos ranqueados.':section==='rarity'?'Personagens recrutados ordenados pela chance de obtenção.':section==='power'?'Soma dos atributos dos quatro personagens mais fortes do inventário, com Shiny e Traits.':section==='raid'?'Maior dano contra o chefe do ciclo atual.':section==='tower'?'Maior andar conquistado.':'Um presente de '+number.format(friends?.giftGold??GIFT_GOLD)+' ouro por amigo. Os três primeiros presentes recebidos no ciclo também dão um token de reroll cada. Reset às 12h, horário de Brasília.'}</p>
+      <p class="caption community-help">${section==='arena'?'Top 30 por pontos acumulados em duelos ranqueados.':section==='rarity'?'Capturas registradas por chance entre recrutáveis. As capturas pelo cálculo antigo aparecem na ficha do jogador.':section==='power'?'Soma dos atributos dos quatro personagens mais fortes do inventário, com Shiny e Traits.':section==='raid'?'Maior dano contra o chefe do ciclo atual.':section==='tower'?'Maior andar conquistado.':'Um presente de '+number.format(friends?.giftGold??GIFT_GOLD)+' ouro por amigo. Os três primeiros presentes recebidos no ciclo também dão um token de reroll cada. Reset às 12h, horário de Brasília.'}</p>
       ${section==='friends'?'<p class="daily-clock">Próximo reset <strong data-reset-clock>—</strong></p>'+friendList():rankArt()}`;
     tick();
   }

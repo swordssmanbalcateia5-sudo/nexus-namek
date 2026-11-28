@@ -69,3 +69,16 @@ test('níveis que mantêm a espera aumentam o ouro dos encontros comuns',()=>{
     assert.equal(makeBattle(after,1000,true).goldReward,makeBattle(before,1000,true).goldReward);
   }
 });
+
+test('a chance de encontrar um recruta não entra na raridade registrada',()=>{
+  const recruit=(luck,encounter)=>{
+    const rolls=[encounter,.995,0,.01,.99];
+    return rollRecruit(()=>rolls.shift(),luck);
+  };
+  assert.equal(recruit(.1,.3),null);
+  assert.ok(recruit(.5,.3));
+  const low=recruit(.1,0);
+  assert.equal(low.oddsBasis,'recruitable');
+  assert.deepEqual(recruit(.5,0),low);
+  assert.ok(recruit(1,0).odds<low.odds);
+});

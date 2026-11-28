@@ -1133,7 +1133,7 @@ function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES
   const shiny=random()<shinyP;
   const trait=pickTrait(random);
   const traitP=trait?1/trait.odds:1-TRAITS.reduce((sum,t)=>sum+1/t.odds,0);
-  return {id:card.id,shiny,trait:trait?.name??null,odds:Math.round(1/(chance*weights[tier-1]*groupP/group.length*(shiny?shinyP:1-shinyP)*traitP))};
+  return {id:card.id,shiny,trait:trait?.name??null,oddsBasis:'recruitable',odds:Math.round(1/(weights[tier-1]*groupP/group.length*(shiny?shinyP:1-shinyP)*traitP))};
 }
 
 const SALE_PRICES=[8,20,50,125,350,1000,3500,12000];
@@ -1736,7 +1736,7 @@ function playTime(ms){
   return `${Math.floor(minutes/60)} h ${minutes%60} min`;
 }
 function odds(unit){
-  return unit.odds?`<strong class="rarity-value" title="1 em ${number.format(unit.odds)}">${rarityLabel(unit.odds)}</strong>`:'';
+  return unit.odds?`<strong class="rarity-value" title="1 em ${number.format(unit.odds)} ${unit.oddsBasis==='recruitable'?'recrutáveis':'encontros comuns (registro anterior)'}">${rarityLabel(unit.odds)}</strong>`:'';
 }
 const empty=text=>`<p class="community-empty">${text}</p>`;
 
@@ -2489,7 +2489,7 @@ function renderProfile(){
       ${!publicUnit&&unit.trait==='Voto de Nen'?`<button class="ghost" data-nen="${unit.uid}" ${inTeam&&!unit.nen&&formationCost(state)>=4?'disabled':''}>${unit.nen?'Desativar Última Aposta':inTeam&&formationCost(state)>=4?'Libere uma vaga para ativar':'Ativar Última Aposta'}</button>`:''}
       ${bonuses.length?`<ul>${bonuses.map(bonus=>`<li>${bonus}</li>`).join('')}</ul>`:''}
     </section>
-    <section class="card"><h3>Recrutamento</h3><p>${unit.odds?`Chance registrada no encontro · 1 em ${int.format(unit.odds)}`:'Integrante inicial'}</p>
+    <section class="card"><h3>Recrutamento</h3><p>${unit.odds?`1 em ${int.format(unit.odds)} ${unit.oddsBasis==='recruitable'?'recrutáveis':'encontros comuns (registro anterior)'}`:'Integrante inicial'}</p>
       ${unit.shiny?'<p class="caption">Shiny concede +25% a PV, Ataque, Magia, Defesa e Resistência.</p>':''}
     </section>
   </div>`;

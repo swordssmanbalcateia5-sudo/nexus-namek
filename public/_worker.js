@@ -3804,7 +3804,7 @@ function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES
   const traitMult=t=>isEpicTrait(t)?(1+traitBoost):1;
   const totalTraitP=TRAITS.reduce((sum,t)=>sum+traitMult(t)/t.odds,0);
   const traitP=trait?traitMult(trait)/trait.odds:Math.max(.05,1-totalTraitP);
-  return {id:card.id,shiny,trait:trait?.name??null,odds:Math.round(1/(chance*weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
+  return {id:card.id,shiny,trait:trait?.name??null,oddsBasis:'recruitable',odds:Math.round(1/(weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
 }
 
 const SALE_PRICES=[8,20,50,125,350,1000,3500,12000];
@@ -4898,12 +4898,13 @@ function summarize(unit,mastery=null){
   const stats=fighter(unit,undefined,null,false,mastery);
   const power=['hp','attack','magic','defense','resistance','speed'].reduce((sum,k)=>sum+stats[k],0);
   return {id:unit.id,xp:unit.xp,stars:unit.stars??0,name:CHARACTERS[unit.id].name,level:stats.level,shiny:unit.shiny,
-    trait:unit.trait,traitSlots:unit.traitSlots,activeSlot:unit.activeSlot,nen:unit.nen===true,serial:unit.serial,odds:unit.odds,power};
+    trait:unit.trait,traitSlots:unit.traitSlots,activeSlot:unit.activeSlot,nen:unit.nen===true,serial:unit.serial,odds:unit.odds,oddsBasis:unit.oddsBasis,power};
 }
 function rankedUnits(collection,mastery=null){
   const units=collection.map(u=>summarize(u,mastery));
   const rarity=(a,b)=>(b.odds??0)-(a.odds??0)||a.name.localeCompare(b.name)||a.serial-b.serial;
-  const rare=units.filter(u=>u.odds>0).sort(rarity).slice(0,30);
+  const isRecruitable=u=>u.oddsBasis==='recruitable';
+  const rare=units.filter(u=>u.odds>0).sort((a,b)=>Number(isRecruitable(b))-Number(isRecruitable(a))||rarity(a,b)).slice(0,30);
   const top=units.sort((a,b)=>b.power-a.power||rarity(a,b)).slice(0,4);
   return [top.reduce((sum,u)=>sum+u.power,0),JSON.stringify(top),JSON.stringify(rare)];
 }
@@ -5250,6 +5251,7 @@ async function rankings(db){
   const [power,rarity,raid,tower,arena]=await db.batch([
     db.prepare('SELECT id,name,power,top_units FROM nexus_players ORDER BY power DESC,name,id LIMIT 30'),
     db.prepare(`SELECT p.id,p.name,u.value AS unit FROM nexus_players p,json_each(p.rare_units) u
+      WHERE json_extract(u.value,'$.oddsBasis')='recruitable'
       ORDER BY json_extract(u.value,'$.odds') DESC,json_extract(u.value,'$.name'),json_extract(u.value,'$.serial'),p.id LIMIT 30`),
     db.prepare(`SELECT id,name,json_extract(game,'$.raid.bestDamage') AS score FROM nexus_players
       WHERE json_extract(game,'$.raid.day')=? AND score>0 ORDER BY score DESC,id LIMIT 30`).bind(dailyCycle().day),

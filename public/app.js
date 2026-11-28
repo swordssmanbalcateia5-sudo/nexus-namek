@@ -756,7 +756,7 @@ function renderProfile(){
       ${!publicUnit&&names.includes('Voto de Nen')?`<button class="ghost" data-nen="${unit.uid}" ${inTeam&&!unit.nen&&formationCost(state)>=4?'disabled':''}>${unit.nen?'Desativar Última Aposta':inTeam&&formationCost(state)>=4?'Libere uma vaga para ativar':'Ativar Última Aposta'}</button>`:''}
       ${bonuses.length?`<ul>${bonuses.map(bonus=>`<li>${bonus}</li>`).join('')}</ul>`:''}
     </section>
-    <section class="card"><h3>Recrutamento</h3><p>${unit.odds?`Chance registrada no encontro · 1 em ${int.format(unit.odds)}`:'Integrante inicial'}</p>
+    <section class="card"><h3>Recrutamento</h3><p>${unit.odds?`1 em ${int.format(unit.odds)} ${unit.oddsBasis==='recruitable'?'recrutáveis':'encontros comuns (registro anterior)'}`:'Integrante inicial'}</p>
       ${unit.shiny?'<p class="caption">Shiny concede +12% a PV, Ataque, Magia, Defesa e Resistência.</p>':''}
     </section>
   </div>`;

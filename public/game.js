@@ -847,7 +847,7 @@ export function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=U
   const traitMult=t=>isEpicTrait(t)?(1+traitBoost):1;
   const totalTraitP=TRAITS.reduce((sum,t)=>sum+traitMult(t)/t.odds,0);
   const traitP=trait?traitMult(trait)/trait.odds:Math.max(.05,1-totalTraitP);
-  return {id:card.id,shiny,trait:trait?.name??null,odds:Math.round(1/(chance*weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
+  return {id:card.id,shiny,trait:trait?.name??null,oddsBasis:'recruitable',odds:Math.round(1/(weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
 }
 
 export const SALE_PRICES=[8,20,50,125,350,1000,3500,12000];
