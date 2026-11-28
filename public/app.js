@@ -48,6 +48,8 @@ let queuedSync=null;
 const ONLINE_SYNC_MIN_MS=8000;
 const ONLINE_HEARTBEAT_MS=24000+Math.random()*1000;
 let lastOnlineSyncAt=-Infinity;
+// Fim da última luta liquidada no próprio navegador, antes da confirmação do servidor.
+let optimisticEnd=0;
 let publicUnit=null, profileUid=null, profileOpener=null, profileContent='';
 let serverOffset=0;
 const gameNow=()=>Date.now()+serverOffset;
@@ -537,6 +539,23 @@ function showAway(){
   }
   if(!dialog.open)dialog.showModal();
 }
+// No modo online o servidor já resolveu a luta ao criá-la (state.pending.result) e a liquidação
+// não usa sorteio. O navegador aplica o resultado assim que a luta termina, para mostrar vitória,
+// ouro e XP na hora; a próxima sincronização traz o estado oficial e os seriais globais.
+function settleLocally(now){
+  const battle=state.pending;
+  if(!community?.ready()||busy||!battle||battle.end>now||state.towerQueued)return;
+  const entries=advance(state,battle.end,null,1);
+  if(!entries.length)return;
+  // Se uma sincronização trouxe de volta a mesma luta, aplica de novo sem repetir avisos.
+  const repeated=battle.end===optimisticEnd;
+  optimisticEnd=battle.end;
+  if(repeated){if(!drag)renderPanel();return;}
+  finishedBattle={battle,entry:entries[0]};
+  // O número de série definitivo só vem do servidor; o aviso de recruta espera por ele.
+  if(!entries[0].recruit)receive(entries,false);
+  if(!drag)renderPanel();
+}
 let loginRequired=false;
 function connecting(){return community?.active()&&(!community.ready()||loginRequired);}
 function transaction(action,offline=false){
@@ -586,14 +605,14 @@ function transaction(action,offline=false){
         state=data.state;
         ok=action?Boolean(data.changed):true;
         if(firstConnection){arenaRecovery=loadArenaRecovery();finishedBattle=null;stageKey='';}
-        if(data.finished)finishedBattle=data.finished;
+        if(data.finished&&data.finished.battle.end!==optimisticEnd)finishedBattle=data.finished;
         if((firstConnection||data.changed||data.entries.length||previous.gold!==state.gold||previous.traitItems!==state.traitItems||previous.arenaTrophies!==state.arenaTrophies)&&!drag)renderPanel();
         if(firstConnection&&tab==='comunidade')community.mount();
         if(profileUid)renderProfile();
         if(!state.awayReports?.length&&data.offline.total>25){
           const {total,wins,gold,recruits}=data.offline;
           note(`Progresso AFK · ${wins} vitórias em ${total} lutas · +${int.format(gold)} ouro · ${recruits} recrutados.`);
-        }else receive(data.entries,offline);
+        }else receive(data.entries.filter(e=>e.end>optimisticEnd||e.end===optimisticEnd&&e.recruit),offline);
       }else if(navigator.locks)await navigator.locks.request(saveKey,commit);
       else commit();
     } finally{busy=false;showAway();}
@@ -1632,6 +1651,7 @@ setInterval(()=>{
     if(!loginRequired&&!busy&&community.syncAvailable()&&Date.now()-saveTick>=10000){saveTick=Date.now();void transaction(null);}
     return;
   }
+  settleLocally(now);
   // For online exploration, collect the last result and start the next battle in one sync.
   const batchNextEncounter=community.ready()&&state.running&&state.pending&&!state.pending.boss;
   const encounterDue=state.pending
