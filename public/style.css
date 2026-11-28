@@ -326,10 +326,8 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
 .rar-name.rarity-5{color:#FF9FCC}
 .rar-name.rarity-6{color:#F6CD72}
 .rar-name.rarity-7{color:#FF9876}
-.rarity-colors{border:0;padding:0;margin:10px 0 0;display:flex;flex-wrap:wrap;gap:0 18px}
-.rarity-colors input[type="color"]{width:44px;height:32px;cursor:pointer}
-.rar-name.rarity-8{--name-first:var(--rarity-8-first,#79ebef);--name-second:var(--rarity-8-second,#f3a7ff);color:#79ebef}
-.rar-name.rarity-9{--name-first:var(--rarity-9-first,#ffcf70);--name-second:var(--rarity-9-second,#b4adff);color:#ffcf70}
+.rar-name.rarity-8{--name-first:#79ebef;--name-second:#f3a7ff;color:#79ebef}
+.rar-name.rarity-9{--name-first:#ffcf70;--name-second:#b4adff;color:#ffcf70}
 @supports (background-clip:text){
   .rar-name:is(.rarity-8,.rarity-9){
     background:linear-gradient(100deg,var(--name-first),var(--name-second),var(--name-first)) 0 50%/220% 100%;

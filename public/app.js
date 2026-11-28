@@ -22,37 +22,6 @@ let preferences={motion:true,numbers:true};
 try{preferences={...preferences,...JSON.parse(localStorage.getItem('nexus.display')||'{}')};}catch{}
 document.documentElement.dataset.motion=preferences.motion?'on':'off';
 
-const rarityNameColors={
-  '8-first':'#79ebef','8-second':'#f3a7ff',
-  '9-first':'#ffcf70','9-second':'#b4adff',
-};
-const validNameColor=value=>typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value);
-function nameColor(key){
-  const color=preferences.nameColors?.[key];
-  return validNameColor(color)?color:rarityNameColors[key];
-}
-function applyNameColor(key){
-  document.documentElement.style.setProperty('--rarity-'+key,nameColor(key));
-}
-for(const key of Object.keys(rarityNameColors))applyNameColor(key);
-function nameColorControls(){
-  return [[8,'Transcendente'],[9,'Singular']].map(([tier,name])=>
-    `<fieldset class="rarity-colors"><legend><strong class="rar-name rarity-${tier}">${name}</strong></legend>
-      <label>Cor 1 <input type="color" data-name-color="${tier}-first"></label>
-      <label>Cor 2 <input type="color" data-name-color="${tier}-second"></label></fieldset>`
-  ).join('');
-}
-function updateNameColor(input){
-  const key=input.dataset.nameColor;
-  if(!Object.hasOwn(rarityNameColors,key)||!validNameColor(input.value))return false;
-  preferences.nameColors={...preferences.nameColors,[key]:input.value};
-  applyNameColor(key);
-  return true;
-}
-function saveDisplayPreferences(){
-  try{localStorage.setItem('nexus.display',JSON.stringify(preferences));}
-  catch{note('A preferência de exibição vale nesta sessão. O navegador não conseguiu salvá-la.');}
-}
 const spriteURL = name => `art/${name}.png`;
 const img=(sprite,alt='')=>`<img src="${spriteURL(sprite)}" alt="${alt}">`;
 const note = text=> { const box=$('#notice');box.textContent=text;box.hidden=!text; };
@@ -878,7 +847,7 @@ function renderSettings(panel){
         </div>
       </div>
       <h3>Exibição neste dispositivo</h3><label><input type="checkbox" data-pref="motion"> Animações de combate</label>
-      <label><input type="checkbox" data-pref="numbers"> Números de dano na arena</label><h4>Cores dos nomes</h4>${nameColorControls()}</article>`;
+      <label><input type="checkbox" data-pref="numbers"> Números de dano na arena</label></article>`;
     panel.querySelector('.settings').dataset.mode=mode;
   }
   const sale=saleSettings(state.autoSell);
@@ -918,10 +887,6 @@ function renderSettings(panel){
       :'<small class="caption">Nenhum personagem VIP adicionado.</small>';
   }
   for(const input of panel.querySelectorAll('[data-pref]'))input.checked=preferences[input.dataset.pref];
-  for(const input of panel.querySelectorAll('[data-name-color]')){
-    const color=nameColor(input.dataset.nameColor);
-    if(input.value!==color)input.value=color;
-  }
 }
 
 
@@ -1574,17 +1539,12 @@ document.addEventListener('change',e=>{const target=e.target;
   if(target.id==='bulk-mode'){bulkCommon=target.value==='common';return;}
   if(target.id==='col-locked'){colFilter.locked=target.checked;renderCollectionGrid();return;}
   if(target.id==='col-trait'){colFilter.trait=target.checked;renderCollectionGrid();return;}
-  if(target.dataset.nameColor){
-    if(updateNameColor(target))saveDisplayPreferences();
-    return;
-  }
   if(target.dataset.pref){
     preferences[target.dataset.pref]=target.checked;
     document.documentElement.dataset.motion=preferences.motion?'on':'off';
-    saveDisplayPreferences();
+    try{localStorage.setItem('nexus.display',JSON.stringify(preferences));}catch{note('A preferência de exibição vale nesta sessão. O navegador não conseguiu salvá-la.');}
   }});
 document.addEventListener('input',e=>{
-  if(e.target.dataset.nameColor)updateNameColor(e.target);
   if(e.target.id==='col-search'){colFilter.search=e.target.value;renderCollectionGrid();}
 });
 document.addEventListener('keydown',e=>{
