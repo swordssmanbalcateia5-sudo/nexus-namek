@@ -1012,14 +1012,14 @@ function settle(state,battle){
   if(entry.won){
     state.wins++;state.streak=0;
     if(battle.area===2&&!battle.boss) state.finalWins++;
-    entry.xp=Math.round((8+1.25*battle.level)*(battle.boss?3:battle.elite?2:1)*(1+(battle.xpBonus??0)));
+    entry.xp=Math.round((12+2.5*battle.level+.09*battle.level**2)*(battle.boss?3:battle.elite?2:1)*(1+(battle.xpBonus??0)));
     entry.gold=battle.goldReward??Math.round((6+2*battle.level)*(battle.boss?8:(battle.elite?2:1)*(1+(battle.goldBonus??0))));
     if(battle.towerFloor && battle.towerFloor===(state.towerCleared??0)+1){
       state.towerCleared=battle.towerFloor;
       state.traitItems=(state.traitItems??0)+towerPrize(battle.towerFloor);
     }
     state.gold+=entry.gold;
-    for(const fighter of battle.team){const copy=state.collection.find(c=>c.uid===fighter.uid);if(copy){const previous=copy.xp;copy.xp=Math.min(xpTo(levelCap(state)),previous+entry.xp);entry.teamXp+=copy.xp-previous;}}
+    for(const fighter of battle.team){const copy=state.collection.find(c=>c.uid===fighter.uid);if(copy){const previous=copy.xp;copy.xp+=Math.max(0,Math.min(entry.xp,xpTo(levelCap(state))-previous));entry.teamXp+=copy.xp-previous;}}
     entry.reserveXp=shareExperience(state,battle,entry.xp);
     if(battle.recruit){
       const {id,shiny}=battle.recruit;

@@ -623,6 +623,13 @@ function transaction(action,offline=false){
 let bulkCommon=false;
 function lockButton(u){return `<button class="ghost" data-lock-copy="${u.uid}" aria-pressed="${!!u.locked}">${u.locked?'Destrancar':'Trancar'}</button>`;}
 let singularKnown=false,singularCheckAt=0;
+const rarityTabs=['indice','configuracoes','colecao','guia'];
+function singularRevealed(){
+  return singularKnown||Boolean(state.singularDiscovered&&(community?.ready()||location.protocol==='file:'));
+}
+function visibleRarities(){
+  return singularRevealed()?TIERS:TIERS.slice(0,-1);
+}
 async function refreshSingularDiscovery(){
   if(singularKnown||location.protocol==='file:'||Date.now()<singularCheckAt)return;
   singularCheckAt=Date.now()+30000;
@@ -632,13 +639,11 @@ async function refreshSingularDiscovery(){
     const {singular}=await response.json();
     if(singular===true){
       singularKnown=true;
-      if(tab==='indice')renderDex($('#panel'));
+      if(rarityTabs.includes(tab))renderPanel();
     }
   }catch{/* A consulta será repetida enquanto o Índice estiver aberto. */}
 }
 function renderDex(panel){
-  if(state.singularDiscovered&&community?.active())singularKnown=true;
-  void refreshSingularDiscovery();
   const {characters,traits,totals}=dexSummary(state);
   const mastery=dexMastery(state);
   const owned=characters.filter(c=>c.count).length;
@@ -660,7 +665,7 @@ function renderDex(panel){
       const u=state.collection.find(u=>u.id===c.id);
       return `<button class="dex-card" data-profile="${u.uid}">${img(spriteFor(u))}<strong>${unitLabel(u)}</strong><small>${c.count} na coleção · ${c.normal?'Normal':''}${c.normal&&c.shiny?' / ':''}${c.shiny?'Shiny':''}</small><small>${c.worlds.length?'Chance dobrada em '+c.worlds.join(', '):'Mesma chance em todos os mundos'}</small></button>`;
     }).join('');
-    const reveal=i!==8||singularKnown||(location.protocol==='file:'&&state.singularDiscovered);
+    const reveal=i!==8||singularRevealed();
     return `<section class="card dex-group" data-dex-tier="${i+1}"><h3 class="${reveal?`rar-name rarity-${i+1}`:''}">${reveal?tier:'???'} <small>${list.filter(c=>c.count).length}/${list.length}</small></h3><div class="dex-grid">${cards}</div></section>`;
   }).join('');
   panel.innerHTML=`${masteryCard}<article class="card"><h2>Índice de personagens</h2><p>Todos os ${totals.totalChars} personagens podem aparecer em encontros comuns de qualquer mundo. Dentro da mesma raridade, cada personagem do universo local tem o dobro da chance de um visitante.</p><p>${owned}/${totals.totalChars} na coleção · ${totals.seenChars} descobertos · ${totals.shinyChars} variantes Shiny descobertas</p></article>${groups}<details class="card"><summary>Traits descobertas · ${totals.seenTraits}/${totals.totalTraits}</summary><p>${traits.filter(t=>t.seen).map(t=>t.name).join(' · ')||'Nenhuma trait descoberta.'}</p></details>`;
@@ -800,8 +805,11 @@ function changeSetting(input,action){
 }
 function renderSettings(panel){
   const mode=community?.active()?'online':'solo';
-  if(panel.querySelector('.settings')?.dataset.mode!==mode){
-    const sortedChars=Object.values(CHARACTERS).sort((x,y)=>y.tier-x.tier||x.name.localeCompare(y.name,'pt-BR'));
+  const rarities=visibleRarities();
+  const layoutKey=mode+'-'+rarities.length;
+  if(panel.querySelector('.settings')?.dataset.mode!==layoutKey){
+    const sortedChars=Object.values(CHARACTERS).filter(c=>c.tier<=rarities.length)
+      .sort((x,y)=>y.tier-x.tier||x.name.localeCompare(y.name,'pt-BR'));
     panel.innerHTML=`<article class="card settings"><h2>Configurações</h2>
       <h3>Conta</h3><button class="ghost" data-tab="comunidade">Google, Discord e código de acesso</button><h3>Progresso da campanha</h3>${community?.active()?'<p class="caption">Sua conta salva no servidor. Vincule sua conta na Comunidade para recuperar o acesso.</p>':`<p class="caption"><span id="save-status"></span> ${location.protocol==='file:'?'Para atualizar o HTML, mantenha o mesmo nome, pasta e navegador. ':''}Use um backup para continuar em outro arquivo ou dispositivo.</p>
       <button type="button" id="export-save">Exportar backup</button> <button type="button" id="import-save">Importar backup</button>`}
@@ -827,7 +835,7 @@ function renderSettings(panel){
         </div>
         <div class="autosell-section">
           <span class="autosell-label">1. Quais raridades vender automaticamente?</span>
-          <div class="tier-pills">${TIERS.map((name,i)=>`<button type="button" class="tier-pill" data-autosell-tier="${i+1}" aria-pressed="false"><strong>${name}</strong><small>${int.format(SALE_PRICES[i])} ouro${i>=4?` + ${i-3} Ess.`:''}</small></button>`).join('')}</div>
+          <div class="tier-pills">${rarities.map((name,i)=>`<button type="button" class="tier-pill" data-autosell-tier="${i+1}" aria-pressed="false"><strong>${name}</strong><small>${int.format(SALE_PRICES[i])} ouro${i>=4?` + ${i-3} Ess.`:''}</small></button>`).join('')}</div>
         </div>
         <div class="autosell-section">
           <span class="autosell-label">2. Proteções (nunca vender)</span>
@@ -866,9 +874,12 @@ function renderSettings(panel){
       </div>
       <h3>Exibição neste dispositivo</h3><label><input type="checkbox" data-pref="motion"> Animações de combate</label>
       <label><input type="checkbox" data-pref="numbers"> Números de dano na arena</label></article>`;
-    panel.querySelector('.settings').dataset.mode=mode;
+    panel.querySelector('.settings').dataset.mode=layoutKey;
   }
   const sale=saleSettings(state.autoSell);
+  // Keep saved preferences while omitting the unrevealed rarity from labels and controls.
+  const visibleSale={...sale,tiers:sale.tiers.filter(tier=>tier<=rarities.length),
+    keepCharacters:sale.keepCharacters.filter(id=>CHARACTERS[id].tier<=rarities.length)};
   $('#autosell-legacy').hidden=!sale.legacy;
   $('#autosell-rules').hidden=!!sale.legacy;
   const localStatus=$('#save-status');
@@ -892,13 +903,13 @@ function renderSettings(panel){
   }
   const summary=$('#sale-status');
   if(summary){
-    summary.textContent=describeAutoSell(sale);
-    summary.classList.toggle('on',sale.enabled&&sale.tiers.length>0);
+    summary.textContent=describeAutoSell(visibleSale);
+    summary.classList.toggle('on',visibleSale.enabled&&visibleSale.tiers.length>0);
   }
   const vipBox=$('#autosell-vip-tags');
   if(vipBox){
-    vipBox.innerHTML=sale.keepCharacters.length
-      ?sale.keepCharacters.map(id=>{
+    vipBox.innerHTML=visibleSale.keepCharacters.length
+      ?visibleSale.keepCharacters.map(id=>{
         const c=CHARACTERS[id];
         return `<span class="vip-chip">${esc(c.name)} <small>${TIERS[c.tier-1]}</small><button type="button" data-autosell-vip-remove="${id}" aria-label="Remover ${esc(c.name)} da lista VIP">×</button></span>`;
       }).join('')
@@ -1149,6 +1160,7 @@ function renderPanel(){
   document.querySelectorAll('[data-tab]').forEach(b=>{
     if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');
   });
+  if(rarityTabs.includes(tab))void refreshSingularDiscovery();
   const panel=$('#panel');
   const social=tab==='comunidade';
   const communityPanel=$('#community-panel');
@@ -1226,13 +1238,14 @@ function renderPanel(){
     const slots=formationSlots(state);
     const index=pickSlot??(slots.includes(null)?slots.indexOf(null):3);
     const slotOptions=slots.map((uid,i)=>`<option value="${i}" ${index===i?'selected':''}>${i+1} · ${uid?card(uid).name:'Vazia'}</option>`).join('');
-    if(panel.querySelector('#collection-list')){
+    const rarities=visibleRarities();
+    if(panel.querySelector('.collection-filters')?.dataset.rarityCount===String(rarities.length)){
       const target=panel.querySelector('#swap-target');
       if(target){target.innerHTML=slotOptions;target.value=String(index);}
     }else{
       const searchValue=colFilter.search.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
       panel.innerHTML=`<article class="card"><div class="swap"><div><h2>Coleção</h2><p class="caption" id="collection-filtered-count"></p></div><label>Vaga de destino <select id="swap-target">${slotOptions}</select></label></div>
-    <div class="collection-filters"><label class="search-field"><span>Buscar</span><input type="search" id="col-search" placeholder="Nome, universo ou trait" value="${searchValue}"></label><select id="col-sort" aria-label="Ordenar coleção"><option value="potential" ${colFilter.sort==='potential'?'selected':''}>Maior força no Nv. 100</option><option value="power" ${colFilter.sort==='power'?'selected':''}>Maior força atual</option><option value="level" ${colFilter.sort==='level'?'selected':''}>Maior nível</option><option value="tier" ${colFilter.sort==='tier'?'selected':''}>Maior raridade</option><option value="recent" ${colFilter.sort==='recent'?'selected':''}>Mais recente</option></select><select id="col-role" aria-label="Filtrar por função"><option value="">Todas funções</option>${['Guardião','Combatente','Mágico','Suporte'].map(r=>`<option value="${r}" ${colFilter.role===r?'selected':''}>${r}</option>`).join('')}</select><select id="col-tier" aria-label="Filtrar por raridade"><option value="">Todas raridades</option>${TIERS.map((t,i)=>`<option value="${i+1}" ${colFilter.tier===String(i+1)?'selected':''}>${t}</option>`).join('')}</select><label class="filter-check"><input type="checkbox" id="col-shiny" ${colFilter.shiny?'checked':''}> Shiny</label><label class="filter-check"><input type="checkbox" id="col-trait" ${colFilter.trait?'checked':''}> Com Trait</label></div>
+    <div class="collection-filters" data-rarity-count="${rarities.length}"><label class="search-field"><span>Buscar</span><input type="search" id="col-search" placeholder="Nome, universo ou trait" value="${searchValue}"></label><select id="col-sort" aria-label="Ordenar coleção"><option value="potential" ${colFilter.sort==='potential'?'selected':''}>Maior força no Nv. 100</option><option value="power" ${colFilter.sort==='power'?'selected':''}>Maior força atual</option><option value="level" ${colFilter.sort==='level'?'selected':''}>Maior nível</option><option value="tier" ${colFilter.sort==='tier'?'selected':''}>Maior raridade</option><option value="recent" ${colFilter.sort==='recent'?'selected':''}>Mais recente</option></select><select id="col-role" aria-label="Filtrar por função"><option value="">Todas funções</option>${['Guardião','Combatente','Mágico','Suporte'].map(r=>`<option value="${r}" ${colFilter.role===r?'selected':''}>${r}</option>`).join('')}</select><select id="col-tier" aria-label="Filtrar por raridade"><option value="">Todas raridades</option>${rarities.map((t,i)=>`<option value="${i+1}" ${colFilter.tier===String(i+1)?'selected':''}>${t}</option>`).join('')}</select><label class="filter-check"><input type="checkbox" id="col-shiny" ${colFilter.shiny?'checked':''}> Shiny</label><label class="filter-check"><input type="checkbox" id="col-trait" ${colFilter.trait?'checked':''}> Com Trait</label></div>
     <div class="bulk-tools"><label><input type="checkbox" id="col-locked" ${colFilter.locked?'checked':''}> Trancadas</label><label>Venda em lote <select id="bulk-mode"><option value="plain">Duplicatas sem trait</option><option value="common" ${bulkCommon?'selected':''}>Incluir trait Comum/Incomum</option></select></label><button class="ghost" id="bulk-sell">Revisar lote</button></div><p class="caption">A venda em lote considera toda a coleção, até 200 cópias por vez. A melhor cópia de cada personagem, os Shiny, os titulares e as cópias trancadas ficam protegidos.</p>
     <div class="collection-grid" id="collection-list"></div></article>`;
     }
@@ -1256,7 +1269,7 @@ function renderPanel(){
     <p>Especiais de Ace aplicam fogo; os de Shinra Banshōman, chamas azuis; os de Meliodas, chamas negras; e os de Sukuna, sangramento. O estado pulsa cinco vezes, a cada 0,6 s. Reaplicar o mesmo estado renova sua duração.</p></details>
     <h3>Funções</h3><ul><li><b>Combatente</b> · Ataque elevado e golpes básicos físicos.</li><li><b>Guardião</b> · Mais PV e defesa. Seus golpes básicos são físicos.</li><li><b>Mágico</b> · Usa Magia nos golpes básicos e enfrenta a Resistência do alvo.</li><li><b>Suporte</b> · Usa Magia nos golpes básicos. Na reserva da Arena, cura o aliado ativo.</li></ul>
     <h3>Formação e liderança</h3><p>Na exploração, os titulares lutam juntos. Na Arena, entra um por vez, na ordem das vagas ocupadas. Escolha o líder na Formação e consulte a ficha para ver quem recebe o bônus.</p>
-    <h3>Raridade e traits</h3><p>${TIERS.join(' → ')}. Na ficha, você encontra a raridade, a versão Shiny e os bônus da trait de cada cópia.</p><h3>Traits e efeitos</h3><p>A chance indica quantos personagens recrutáveis, em média, correspondem a uma ocorrência da trait.</p><div class="trait-list">${TRAITS.map(t=>`<section><header><strong>${t.name}</strong><small>${t.rarity} · 1/${int.format(t.odds)} · ${(100/t.odds).toLocaleString('pt-BR',{maximumFractionDigits:3})}%</small></header><p>${traitEffects(t).slice(0,t.buffs.filter(Boolean).length).join(' · ')}</p>${t.passive?`<p>${t.passive}</p>`:''}</section>`).join('')}</div></article>`;
+    <h3>Raridade e traits</h3><p>${visibleRarities().join(' → ')}. Na ficha, você encontra a raridade, a versão Shiny e os bônus da trait de cada cópia.</p><h3>Traits e efeitos</h3><p>A chance indica quantos personagens recrutáveis, em média, correspondem a uma ocorrência da trait.</p><div class="trait-list">${TRAITS.map(t=>`<section><header><strong>${t.name}</strong><small>${t.rarity} · 1/${int.format(t.odds)} · ${(100/t.odds).toLocaleString('pt-BR',{maximumFractionDigits:3})}%</small></header><p>${traitEffects(t).slice(0,t.buffs.filter(Boolean).length).join(' · ')}</p>${t.passive?`<p>${t.passive}</p>`:''}</section>`).join('')}</div></article>`;
   }else if(tab==='configuracoes'){
     renderSettings(panel);
   }else{
@@ -1668,7 +1681,7 @@ setInterval(()=>{
     const entry=boards.get(community.playerId()+'/'+competitionKind());
     if(!entry||Date.now()>=entry.until)drawCompetition();
   }
-  if(tab==='indice')void refreshSingularDiscovery();
+  if(rarityTabs.includes(tab))void refreshSingularDiscovery();
   if(tab==='arena')updateDuelButton();
   if(tab==='modos'){
     updateTowerAdvance(now);

@@ -85,3 +85,26 @@ test('a chance de encontrar um recruta não entra na raridade registrada',()=>{
   assert.deepEqual(recruit(.5,0),low);
   assert.ok(recruit(1,0).odds<low.odds);
 });
+
+test('XP cresce com o encontro e mantém os níveis e limites existentes',()=>{
+  const experience=(level,{elite=false,boss=false,xp=0}={})=>{
+    const state=fresh(1000,7);
+    state.unlocked=9;
+    state.collection[0].xp=xp;
+    const battle=makeBattle(state,1000);
+    Object.assign(battle,{level,elite,boss,recruit:null,xpBonus:.8,result:{winner:0,reason:'eliminação',events:[]}});
+    state.pending=battle;
+    return advance(state,battle.end)[0];
+  };
+  assert.equal(experience(10).xp,83);
+  assert.equal(experience(50).xp,652);
+  assert.equal(experience(99).xp,2055);
+  assert.equal(experience(50,{elite:true}).xp,1303);
+  assert.equal(experience(50,{boss:true}).xp,1955);
+  const capped=fresh(1000,7);
+  capped.collection[0].xp=10000000;
+  capped.pending=makeBattle(capped,1000);
+  capped.pending.result={winner:0,reason:'eliminação',events:[]};
+  advance(capped,capped.pending.end);
+  assert.equal(capped.collection[0].xp,10000000);
+});
