@@ -1250,7 +1250,9 @@ function renderPanel(){
       const price=upgrade.costs[level];
       const world=upgrade.worlds[level];
       const locked=world>(state.unlocked??0)+1;
-      const effect=index=>id==='sorte'?
+      const effect=index=>id==='ritmo'
+        ? `${upgrade.values[index]} s${upgrade.goldBonus[index]?` · +${upgrade.goldBonus[index]}% de ouro`:''}`
+        : id==='sorte'?
         `${Math.min(50,upgrade.values[index])}% de recruta · +${Math.max(0,upgrade.values[index]-50)}% sobre a chance de Raro ou superior`:
         `${['ouro','treino','brilho','sintonia'].includes(id)?'+':''}${upgrade.values[index]}${upgrade.unit}`;
       return `<div class="upgrades-row"><div><h3>${upgrade.name} <small>Nível ${level} / ${upgrade.costs.length}</small></h3><p>${upgrade.description}</p><p class="upgrade-effect">${effect(level)}${price===undefined?'':` → ${effect(level+1)}`}</p></div><button class="primary" data-upgrade="${id}" aria-label="${upgrade.name} · ${price===undefined?'Nível máximo':`Comprar por ${int.format(price)} ouro`}" ${price===undefined||locked||state.gold<price?'disabled':''}>${price===undefined?'Nível máximo':`${int.format(price)} ouro${locked?' · Mundo '+world:''}`}</button></div>`;

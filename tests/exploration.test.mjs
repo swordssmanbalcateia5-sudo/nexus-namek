@@ -31,8 +31,8 @@ test('raridade máxima depende do Rastreio e do excedente de Sorte',()=>{
 test('Ritmo exige ouro e mundo desbloqueado em cada etapa',()=>{
   const state=fresh(1000,7);
   const levels=[
-    [1,180,14.5],[2,1000,14],[3,3500,13.5],[4,9000,13],[5,20000,12.5],
-    [6,40000,12],[7,70000,11],[8,120000,10],[9,200000,9],[10,350000,8]
+    [1,180,14],[2,1000,13],[3,3500,13],[4,9000,12],[5,20000,12],
+    [6,40000,11],[7,70000,11],[8,160000,10],[9,400000,9],[10,1000000,8]
   ];
   for(const [world,price,seconds] of levels){
     state.unlocked=world-1;
@@ -52,4 +52,18 @@ test('Ritmo exige ouro e mundo desbloqueado em cada etapa',()=>{
   state.unlocked=11;
   assert.equal(buyUpgrade(state,'ritmo'),false);
   assert.equal(waitFor(state),8000);
+});
+
+test('níveis que mantêm a espera aumentam o ouro dos encontros comuns',()=>{
+  const state=fresh(1000,7);
+  state.world=9;
+  for(const level of [3,5,7]){
+    const before=structuredClone(state);
+    const after=structuredClone(state);
+    before.upgrades.ritmo=level-1;
+    after.upgrades.ritmo=level;
+    assert.equal(waitFor(before),waitFor(after));
+    assert.ok(makeBattle(after,1000).goldReward>makeBattle(before,1000).goldReward);
+    assert.equal(makeBattle(after,1000,true).goldReward,makeBattle(before,1000,true).goldReward);
+  }
 });

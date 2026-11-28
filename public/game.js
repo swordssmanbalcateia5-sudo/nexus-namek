@@ -515,7 +515,9 @@ const initial = ['piccolo','yamcha','kuririn','bulma'];
 const position = [[72,47],[56,72],[39,28],[22,59]];
 const HOUR = 3600000;
 export const UPGRADES = {
-  ritmo:{name:'Ritmo de expedição',worlds:[1,2,3,4,5,6,7,8,9,10],costs:[180,1000,3500,9000,20000,40000,70000,120000,200000,350000],values:[15,14.5,14,13.5,13,12.5,12,11,10,9,8],unit:' s',description:'Reduz a espera entre encontros.'},
+  ritmo:{name:'Ritmo de expedição',worlds:[1,2,3,4,5,6,7,8,9,10],costs:[180,1000,3500,9000,20000,40000,70000,160000,400000,1000000],
+    values:[15,14,13,13,12,12,11,11,10,9,8],goldBonus:[0,0,0,5,5,10,10,15,15,15,15],
+    unit:' s',description:'Reduz a espera entre encontros ou aumenta o ouro das vitórias em encontros comuns e de elite.'},
   sorte:{name:'Sorte',worlds:[1,1,1,2,3,5,7,8,10],costs:[50,125,300,1000,3500,12000,36000,90000,200000],values:[10,20,30,40,50,60,70,80,90,100],unit:'%',description:'Até 50%, aumenta a chance de encontrar um recruta em lutas comuns. Cada ponto acima de 50% aumenta em 1% relativo a chance de esse recruta ser Raro ou superior.'},
   ouro:{name:'Bônus de ouro',worlds:[1,1,1,2,4,6,8],costs:[75,180,400,2000,18000,90000,250000],values:[0,10,20,35,50,65,80,100],unit:'%',description:'Acrescenta ouro às vitórias em encontros comuns e de elite.'},
   xp:{name:'Experiência compartilhada',worlds:[1,1,1,2,4,6,8],costs:[60,150,325,1600,14000,75000,210000],values:[0,25,40,60,70,80,90,100],unit:'%',description:'Distribui entre os reservas uma fração da XP que um titular recebe por vitória. Cada titular mantém sua recompensa integral.'},
@@ -902,7 +904,7 @@ export function makeBattle(state,start,boss=false,towerFloor=0){
   const reserveShare=upgradeValue(state,'xp')/100;
   const reserves=reserveShare?state.collection.filter(unit=>!state.team.includes(unit.uid)&&unit.xp<xpTo(levelCap(state))).map(unit=>unit.uid):[];
   return {start,end:start+duration,boss,elite,towerFloor,world:encounterWorld,area:state.area,level,team,enemy,recruit,result,
-    goldReward:Math.round((6+2*level)*1.2*(boss?8:(elite?2:1)*(1+upgradeValue(state,'ouro')/100+mastery.goldBonus))),
+    goldReward:Math.round((6+2*level)*1.2*(boss?8:(elite?2:1)*(1+(upgradeValue(state,'ouro')+UPGRADES.ritmo.goldBonus[upgradeLevel(state,'ritmo')])/100+mastery.goldBonus))),
     xpBonus:upgradeValue(state,'treino')/100,recoveryMs:upgradeValue(state,'enfermaria')*1000,reserveShare,reserves};
 }
 
