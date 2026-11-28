@@ -113,7 +113,7 @@ export function arenaLeague(points=0){
 
 export const ARENA_SHOP=[
   {id:'token',name:'Token de reroll',desc:'Rola as traits de um slot.',cost:5,grant:{traitItems:1}},
-  {id:'xpTome',name:'Tomo de XP',desc:'+25.000 XP instantâneo para um personagem.',cost:6,grant:{xpTome:1}},
+  {id:'xpTome',name:'Tomo de XP',desc:'+250.000 XP instantâneo para um personagem.',cost:6,grant:{xpTome:1}},
   {id:'essence2',name:'Essência de Despertar ×2',desc:'Substitui duplicatas no Despertar (★1–★5).',cost:8,grant:{essence:2}},
   {id:'catalyst',name:'Catalisador de Trait',desc:'Triplica chance de 2–3 traits e garante Rara+.',cost:15,grant:{catalyst:1}},
   {id:'traitLock',name:'Selo de Trava de Trait',desc:'Trava 1 trait atual durante o reroll.',cost:20,grant:{traitLock:1}},
@@ -122,7 +122,7 @@ export const ARENA_SHOP=[
 export const GOLD_SHOP=[
   {id:'token',name:'Token de reroll',desc:'Preço sobe a cada compra na semana.',base:150000,step:75000,limit:10,grant:{traitItems:1}},
   {id:'essence',name:'Essência de Despertar',desc:'Desperta personagens sem precisar de cópia.',base:120000,step:40000,limit:10,grant:{essence:1}},
-  {id:'xpTome',name:'Tomo de XP',desc:'+25.000 XP instantâneo em qualquer unidade.',base:100000,step:25000,limit:5,grant:{xpTome:1}},
+  {id:'xpTome',name:'Tomo de XP',desc:'+250.000 XP instantâneo em qualquer unidade.',base:100000,step:25000,limit:5,grant:{xpTome:1}},
   {id:'elixir',name:'Elixir de Recuperação',desc:'Zera imediatamente a recuperação da equipe.',base:25000,step:5000,limit:10,grant:{elixir:1}},
   {id:'catalyst',name:'Catalisador de Trait',desc:'3× chance de 2–3 traits e mínimo Rara+.',base:350000,step:150000,limit:3,grant:{catalyst:1}},
   {id:'traitLock',name:'Selo de Trava de Trait',desc:'Mantém 1 trait escolhida ao rolar o slot.',base:500000,step:250000,limit:2,grant:{traitLock:1}},

@@ -616,7 +616,7 @@ function arenaLeague(points=0){
 }
 const ARENA_SHOP=[
   {id:'token',name:'Token de reroll',desc:'Rola as traits de um slot.',cost:5,grant:{traitItems:1}},
-  {id:'xpTome',name:'Tomo de XP',desc:'+25.000 XP instantâneo para um personagem.',cost:6,grant:{xpTome:1}},
+  {id:'xpTome',name:'Tomo de XP',desc:'+250.000 XP instantâneo para um personagem.',cost:6,grant:{xpTome:1}},
   {id:'essence2',name:'Essência de Despertar ×2',desc:'Substitui duplicatas no Despertar (★1–★5).',cost:8,grant:{essence:2}},
   {id:'catalyst',name:'Catalisador de Trait',desc:'Triplica chance de 2–3 traits e garante Rara+.',cost:15,grant:{catalyst:1}},
   {id:'traitLock',name:'Selo de Trava de Trait',desc:'Trava 1 trait atual durante o reroll.',cost:20,grant:{traitLock:1}},
@@ -624,7 +624,7 @@ const ARENA_SHOP=[
 const GOLD_SHOP=[
   {id:'token',name:'Token de reroll',desc:'Preço sobe a cada compra na semana.',base:150000,step:75000,limit:10,grant:{traitItems:1}},
   {id:'essence',name:'Essência de Despertar',desc:'Desperta personagens sem precisar de cópia.',base:120000,step:40000,limit:10,grant:{essence:1}},
-  {id:'xpTome',name:'Tomo de XP',desc:'+25.000 XP instantâneo em qualquer unidade.',base:100000,step:25000,limit:5,grant:{xpTome:1}},
+  {id:'xpTome',name:'Tomo de XP',desc:'+250.000 XP instantâneo em qualquer unidade.',base:100000,step:25000,limit:5,grant:{xpTome:1}},
   {id:'elixir',name:'Elixir de Recuperação',desc:'Zera imediatamente a recuperação da equipe.',base:25000,step:5000,limit:10,grant:{elixir:1}},
   {id:'catalyst',name:'Catalisador de Trait',desc:'3× chance de 2–3 traits e mínimo Rara+.',base:350000,step:150000,limit:3,grant:{catalyst:1}},
   {id:'traitLock',name:'Selo de Trava de Trait',desc:'Mantém 1 trait escolhida ao rolar o slot.',base:500000,step:250000,limit:2,grant:{traitLock:1}},
@@ -2950,7 +2950,7 @@ const {dailyCycle,weeklyCycle,ARENA_SHOP,GOLD_SHOP}=communityRules;
 const AREAS = [
   { id:'entrada', name:'Costa de Namek', description:'Patrulhas do império rondam o litoral.', levels:[1,3], unlock:1, enemy:'Soldado da Tropa Freeza', base:[150,18,9,9], color:'Roxo' },
   { id:'meio', name:'Planícies Verdes', description:'O terreno aberto favorece as tropas de elite.', levels:[4,6], unlock:4, enemy:'Veterano da Tropa Freeza', base:[220,23,12,12], color:'Amarelo' },
-  { id:'final', name:'Base de Freeza', description:'Vença 12 encontros nesta área para liberar Freeza.', levels:[7,10], unlock:7, enemy:'Oficial da Tropa Freeza', base:[300,28,14,14], color:'Vermelho' },
+  { id:'final', name:'Base de Freeza', description:'Vença 15 encontros nesta área para liberar Freeza.', levels:[7,10], unlock:7, enemy:'Oficial da Tropa Freeza', base:[300,28,14,14], color:'Vermelho' },
 ];
 const BOSS = {name:'Freeza · Forma Final',base:[520,38,18,18], color:'Roxo'};
 const WORLDS = [
@@ -3459,15 +3459,17 @@ const initial = ['piccolo','yamcha','kuririn','bulma'];
 const position = [[72,47],[56,72],[39,28],[22,59]];
 const HOUR = 3600000;
 const UPGRADES = {
-  ritmo:{name:'Ritmo de expedição',worlds:[1,2,4,6,8],costs:[120,1800,15000,80000,240000],values:[10,9,8,7,6,5],unit:' s',description:'Reduz a espera entre encontros.'},
+  ritmo:{name:'Ritmo de expedição',worlds:[1,2,4,6,8,10],costs:[120,1800,15000,80000,240000,350000],values:[10,9,8,7,6,5,4.5],unit:' s',description:'Reduz a espera entre encontros.'},
   sorte:{name:'Sorte',worlds:[1,1,1,2,3,5,7,8,10],costs:[50,125,300,1000,3500,12000,36000,90000,200000],values:[10,20,30,40,50,60,70,80,90,100],unit:'%',description:'Até 50%, aumenta a chance de encontrar um recruta em lutas comuns. Cada ponto acima de 50% aumenta em 1% relativo a chance de esse recruta ser Raro ou superior.'},
-  ouro:{name:'Bônus de ouro',worlds:[1,1,1,2,4,6,8],costs:[75,180,400,2000,18000,90000,250000],values:[0,10,20,30,35,40,45,50],unit:'%',description:'Acrescenta ouro às vitórias em encontros comuns e de elite.'},
+  ouro:{name:'Bônus de ouro',worlds:[1,1,1,2,4,6,8],costs:[75,180,400,2000,18000,90000,250000],values:[0,10,20,35,50,65,80,100],unit:'%',description:'Acrescenta ouro às vitórias em encontros comuns e de elite.'},
   xp:{name:'Experiência compartilhada',worlds:[1,1,1,2,4,6,8],costs:[60,150,325,1600,14000,75000,210000],values:[0,25,40,60,70,80,90,100],unit:'%',description:'Distribui entre os reservas uma fração da XP que um titular recebe por vitória. Cada titular mantém sua recompensa integral.'},
-  rastreio:{name:'Rastreio de raros',worlds:[1,2,4,6,9],costs:[100,600,4500,24000,100000],values:[18,20,24,28,32,36],unit:'%',description:'Chance de um recruta ser de raridade Rara ou superior. Cada uma dessas raridades recebe o mesmo aumento proporcional.'},
-  treino:{name:'Treino de combate',worlds:[1,2,4,7],costs:[80,700,5000,30000],values:[0,10,20,30,40],unit:'%',description:'Aumenta a XP por vitória na campanha. O bônus também entra no cálculo da experiência compartilhada.'},
-  enfermaria:{name:'Enfermaria',worlds:[1,3,5,8],costs:[90,1000,6500,45000],values:[20,18,16,14,12],unit:' s',description:'Reduz o tempo de recuperação de titulares derrotados na exploração, inclusive quando a equipe inteira cai.'},
+  rastreio:{name:'Rastreio de raros',worlds:[1,2,4,6,9,10],costs:[100,600,4500,24000,100000,250000],values:[18,20,24,28,32,36,40],unit:'%',description:'Chance de um recruta ser de raridade Rara ou superior. Cada uma dessas raridades recebe o mesmo aumento proporcional.'},
+  treino:{name:'Treino de combate',worlds:[1,2,4,7,9,10],costs:[80,700,5000,30000,70000,140000],values:[0,10,20,30,40,60,80],unit:'%',description:'Aumenta a XP por vitória na campanha. O bônus também entra no cálculo da experiência compartilhada.'},
+  enfermaria:{name:'Enfermaria',worlds:[1,3,5,8,9,10],costs:[90,1000,6500,45000,70000,140000],values:[20,18,16,14,12,10,8],unit:' s',description:'Reduz o tempo de recuperação de titulares derrotados na exploração, inclusive quando a equipe inteira cai.'},
+  brilho:{name:'Caçador de Shinies',worlds:[4,6,8,10],costs:[8000,40000,160000,450000],values:[0,10,20,35,50],unit:'%',description:'Aumenta proporcionalmente a chance de encontrar variantes Shiny em recrutamentos.'},
+  sintonia:{name:'Sintonia de Traits',worlds:[5,7,9,10],costs:[15000,65000,220000,550000],values:[0,10,20,30,40],unit:'%',description:'Aumenta a chance de recrutas naturais virem com Traits Épicas ou superiores.'},
 };
-const xpFor = level => 16 + level*5 + Math.round(.14*level**2);
+const xpFor = level => 26 + level*12 + Math.round(1.25*level**2 + .070*level**3);
 const scale = level => 1 + .1*(level-1) + .001*(level-1)**2;
 const thresholds=[0,0];
 for(let level=1;level<100;level++)thresholds.push(thresholds[level]+xpFor(level));
@@ -3482,7 +3484,7 @@ function xpProgress(xp,cap=100){
   return {level,current:xp-xpTo(level),required:level<cap?xpFor(level):0};
 }
 const maxLevel = state=>Math.max(1,...state.team.map(id=>levelAt(state.collection.find(x=>x.uid===id).xp)));
-const readyForBoss = state=>state.team.length>0 && state.finalWins>=(state.bossGoal??12) && !state.completed;
+const readyForBoss = state=>state.team.length>0 && state.finalWins>=(state.bossGoal??15) && !state.completed;
 const upgradeLevel = (state,id)=>state.upgrades?.[id]??(id==='ritmo'&&state.upgraded?1:0);
 const upgradeValue = (state,id)=>UPGRADES[id].values[upgradeLevel(state,id)];
 const waitFor = state=>upgradeValue(state,'ritmo')*1000;
@@ -3510,18 +3512,18 @@ const TRAIT_PITY_LIMIT=25;
 const PRESET_SLOTS=['exploracao','arena','torre','raid'];
 const PRESET_LABELS={exploracao:'Exploração',arena:'Arena',torre:'Torre',raid:'Raid'};
 const RAID_MILESTONES=[
-  {damage:50000,label:'50 mil',gold:5000,items:{essence:1}},
-  {damage:250000,label:'250 mil',gold:15000,traitItems:1},
-  {damage:750000,label:'750 mil',gold:35000,items:{essence:2,xpTome:1}},
-  {damage:2000000,label:'2M',gold:75000,traitItems:1,items:{catalyst:1}},
-  {damage:5000000,label:'5M',gold:150000,traitItems:2,items:{traitLock:1}},
+  {damage:10000,label:'10 mil',gold:5000,items:{essence:1}},
+  {damage:25000,label:'25 mil',gold:15000,traitItems:1},
+  {damage:45000,label:'45 mil',gold:35000,items:{essence:2,xpTome:1}},
+  {damage:80000,label:'80 mil',gold:75000,traitItems:1,items:{catalyst:1}},
+  {damage:150000,label:'150 mil',gold:150000,traitItems:2,items:{traitLock:1}},
 ];
 const WORLD_BOSS_MILESTONES=[
-  {damage:500000,label:'500 mil',gold:20000,traitItems:1,items:{essence:1}},
-  {damage:2000000,label:'2M',gold:50000,traitItems:2,items:{essence:2}},
-  {damage:10000000,label:'10M',gold:100000,traitItems:2,items:{xpTome:2,catalyst:1}},
-  {damage:50000000,label:'50M',gold:200000,traitItems:3,items:{essence:4,traitLock:1}},
-  {damage:200000000,label:'200M',gold:400000,traitItems:5,items:{catalyst:2,traitLock:1}},
+  {damage:100000,label:'100 mil',gold:20000,traitItems:1,items:{essence:1}},
+  {damage:400000,label:'400 mil',gold:50000,traitItems:2,items:{essence:2}},
+  {damage:1000000,label:'1M',gold:100000,traitItems:2,items:{xpTome:2,catalyst:1}},
+  {damage:2500000,label:'2,5M',gold:200000,traitItems:3,items:{essence:4,traitLock:1}},
+  {damage:6000000,label:'6M',gold:400000,traitItems:5,items:{catalyst:2,traitLock:1}},
 ];
 const TOWER_AFFIXES=[
   {id:'padrao',name:'Combate padrão',desc:'Sem modificadores ambientais.',apply:()=>{}},
@@ -3724,22 +3726,31 @@ function rng(seed,index){
   let state=(seed^Math.imul(index+1,2654435761))>>>0 || 1;
   return ()=>{state^=state<<13;state^=state>>>17;state^=state<<5;return (state>>>0)/4294967296;};
 }
-function pickTrait(random){
-  let p=random();for(const t of TRAITS){p-=1/t.odds;if(p<0)return t;}return null;
+function isEpicTrait(t){return (t.tier??(t.odds>=50?4:1))>=4;}
+function pickTrait(random,qualityBoost=0){
+  const mult=t=>isEpicTrait(t)?(1+qualityBoost):1;
+  let p=random();
+  for(const t of TRAITS){p-=mult(t)/t.odds;if(p<0)return t;}
+  return null;
 }
 function recruitWeights(rarePercent){
   const base=UPGRADES.rastreio.values[0];
-  if(rarePercent===base)return chanceByTier;
-  // Transfer probability from common units to rare and higher tiers, preserving their relative odds.
+  const clamped=Math.min(65,Math.max(base,rarePercent));
+  if(clamped===base)return chanceByTier;
+  const delta=(clamped-base)/100;
+  // Transfere de Comum (e de Incomum se necessário) mantendo pesos sempre positivos.
+  const fromCommon=Math.min(chanceByTier[0]-.05,delta);
+  const fromUncommon=Math.max(0,delta-fromCommon);
   return chanceByTier.map((weight,i)=>{
-    if(i===0)return weight-(rarePercent-base)/100;
-    return i===1?weight:weight*rarePercent/base;
+    if(i===0)return weight-fromCommon;
+    if(i===1)return weight-fromUncommon;
+    return weight*clamped/base;
   });
 }
 function recruitRates(luckPercent,rastreioPercent){
-  return {encounter:Math.min(50,luckPercent),rare:rastreioPercent*(100+Math.max(0,luckPercent-50))/100};
+  return {encounter:Math.min(50,luckPercent),rare:Math.min(65,rastreioPercent*(100+Math.max(0,luckPercent-50))/100)};
 }
-function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES.rastreio.values[0]){
+function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES.rastreio.values[0],shinyBoost=0,traitBoost=0){
   const rates=recruitRates(luck*100,rarePercent);
   const chance=rates.encounter/100;
   if(random()>=chance) return null;
@@ -3754,10 +3765,13 @@ function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES
   const ticket=Math.floor(random()*total);
   const card=ticket<pool.length?pool[ticket]:local[ticket-pool.length];
   const cardChance=(card.universe===universe?2:1)/total;
-  const shinyP=.05;
+  const baseShiny=tier>=7?.10:.05;
+  const shinyP=Math.min(.25,baseShiny*(1+shinyBoost));
   const shiny=random()<shinyP;
-  const trait=pickTrait(random);
-  const traitP=trait?1/trait.odds:1-TRAITS.reduce((sum,t)=>sum+1/t.odds,0);
+  const trait=pickTrait(random,traitBoost);
+  const traitMult=t=>isEpicTrait(t)?(1+traitBoost):1;
+  const totalTraitP=TRAITS.reduce((sum,t)=>sum+traitMult(t)/t.odds,0);
+  const traitP=trait?traitMult(trait)/trait.odds:Math.max(.05,1-totalTraitP);
   return {id:card.id,shiny,trait:trait?.name??null,odds:Math.round(1/(chance*weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
 }
 const SALE_PRICES=[8,20,50,125,350,1000,3500,12000];
@@ -3769,13 +3783,18 @@ function firstReady(state){
   return Math.min(...state.team.map(uid=>readyAt(state,uid)));
 }
 
-// Faixas de dois mundos. Elites usam o ponto médio entre comum e chefe.
+// Progressão por mundo (1 a 10): escala para valorizar raridades, upgrades e formação ao longo de 1–3 dias.
 const enemyBonuses = [
-  {hp:0, damage:0, bossHp:0, bossDamage:0},
-  {hp:.05, damage:.05, bossHp:.10, bossDamage:.08},
-  {hp:.10, damage:.08, bossHp:.20, bossDamage:.15},
-  {hp:.15, damage:.12, bossHp:.35, bossDamage:.22},
-  {hp:.20, damage:.16, bossHp:.50, bossDamage:.32}
+  {hp:0,    damage:0,    bossHp:0,    bossDamage:0},    // M1 Namek
+  {hp:.18,  damage:.12,  bossHp:.26,  bossDamage:.16},  // M2 Arlong Park
+  {hp:.42,  damage:.26,  bossHp:.62,  bossDamage:.38},  // M3 Exames Chūnin
+  {hp:.72,  damage:.45,  bossHp:1.08, bossDamage:.64},  // M4 Soul Society
+  {hp:1.10, damage:.66,  bossHp:1.68, bossDamage:.95},  // M5 Jujutsu Kaisen
+  {hp:1.55, damage:.90,  bossHp:2.40, bossDamage:1.28}, // M6 Black Clover
+  {hp:2.05, damage:1.15, bossHp:3.20, bossDamage:1.62}, // M7 Nanatsu no Taizai
+  {hp:2.65, damage:1.42, bossHp:4.10, bossDamage:1.98}, // M8 JoJo
+  {hp:3.30, damage:1.70, bossHp:5.10, bossDamage:2.35}, // M9 Hunter × Hunter
+  {hp:4.00, damage:2.00, bossHp:6.20, bossDamage:2.75}, // M10 One Punch Man
 ];
 function makeBattle(state,start,boss=false,towerFloor=0){
   const random=rng(state.seed,state.index++);
@@ -3789,9 +3808,9 @@ function makeBattle(state,start,boss=false,towerFloor=0){
   const mastery=dexMastery(state);
   const team=available.map(uid=>fighter(state.collection.find(c=>c.uid===uid),state.positions[uid],available.includes(leader?.uid)?CHARACTERS[leader.id]:null,!!special,mastery));
   const level=towerFloor?90+towerFloor:special?special.level:Math.max(area.levels[0],Math.min(area.levels[1],maxLevel(state)+Math.floor(random()*3)-1));
-  const recruit=special?null:rollRecruit(random,upgradeValue(state,'sorte')/100,world.universe,upgradeValue(state,'rastreio'));
+  const recruit=special?null:rollRecruit(random,upgradeValue(state,'sorte')/100,world.universe,upgradeValue(state,'rastreio'),upgradeValue(state,'brilho')/100,upgradeValue(state,'sintonia')/100);
   const grow=scale(level)*(towerFloor?1+.06*(towerFloor-1):1);
-  const bonus=enemyBonuses[Math.floor(encounterWorld/2)];
+  const bonus=enemyBonuses[Math.min(enemyBonuses.length-1,encounterWorld)];
   const hpBonus=boss?bonus.bossHp:elite?(bonus.hp+bonus.bossHp)/2:bonus.hp;
   const damageBonus=boss?bonus.bossDamage:elite?(bonus.damage+bonus.bossDamage)/2:bonus.damage;
   const [rawHp,rawPower,def,res]=(special?.base??area.base).map(x=>Math.round(x*grow));
@@ -3868,7 +3887,7 @@ function settle(state,battle){
   if(entry.won){
     state.wins++;state.streak=0;
     if(battle.area===2&&!battle.boss) state.finalWins++;
-    entry.xp=Math.round((8+2*battle.level)*(battle.boss?3:battle.elite?2:1)*(1+(battle.xpBonus??0)));
+    entry.xp=Math.round((8+1.25*battle.level)*(battle.boss?3:battle.elite?2:1)*(1+(battle.xpBonus??0)));
     entry.gold=battle.goldReward??Math.round((6+2*battle.level)*(battle.boss?8:(battle.elite?2:1)*(1+(battle.goldBonus??0))));
     if(battle.towerFloor && battle.towerFloor===(state.towerCleared??0)+1){
       state.towerCleared=battle.towerFloor;
@@ -4081,7 +4100,7 @@ function transcendentBoss(slotIndex,level,factor){
 function towerEnemies(floor){
   const index=(floor-1)%WORLDS.length;
   const level=Math.min(100,62+Math.floor((floor-1)*.45));
-  const factor=.82+.009*(floor-1);
+  const factor=.85+.014*(floor-1)+(floor>30?.016*(floor-30):0);
   if(floor%10===0&&TRANSCENDENT_IDS.length){
     const count=Math.min(4,Math.floor(floor/10));
     const offset=Math.floor(floor/10)-1;
@@ -4213,9 +4232,9 @@ function removeMember(state,uid){
 }
 
 function travel(state,index){
-  state.journey[state.world]={area:state.area,completed:state.completed,finalWins:state.finalWins,bossGoal:state.bossGoal??12};
-  const progress=state.journey[index]??{area:0,completed:false,finalWins:0,bossGoal:12+3*index};
-  Object.assign(state,{bossGoal:12},progress,{world:index,streak:0});
+  state.journey[state.world]={area:state.area,completed:state.completed,finalWins:state.finalWins,bossGoal:state.bossGoal??15};
+  const progress=state.journey[index]??{area:0,completed:false,finalWins:0,bossGoal:15+10*index};
+  Object.assign(state,{bossGoal:15},progress,{world:index,streak:0});
   delete state.destination;
 }
 const STAT_KEYS=['hp','attack','magic','defense','resistance','speed'];
@@ -4539,7 +4558,7 @@ function applyGameAction(state,action,now){
       const maxXp=xpTo(levelCap(state));
       if(!unit||!((state.items?.xpTome??0)>=1)||unit.xp>=maxXp)return false;
       state.items.xpTome--;
-      unit.xp=Math.min(maxXp,unit.xp+25000);
+      unit.xp=Math.min(maxXp,unit.xp+250000);
       return true;
     }
     case 'useElixir': {

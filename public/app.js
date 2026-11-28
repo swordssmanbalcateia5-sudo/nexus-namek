@@ -732,7 +732,7 @@ function renderProfile(){
     <section class="card"><h3>Nível ${xp.level}</h3>
       ${publicUnit?'':xp.required?`<label for="profile-xp">${xp.current} / ${xp.required} XP até o próximo nível</label><progress id="profile-xp" value="${xp.current}" max="${xp.required}"></progress>`:'<p>Nível máximo</p>'}
       <p class="caption">${int.format(unit.xp)} XP total</p>
-      ${!publicUnit&&xp.required?`<button type="button" class="ghost" data-use-xp-tome="${unit.uid}" ${xpTomes<1?'disabled':''}>Usar Tomo de XP (+25.000 XP) · ${xpTomes} disp.</button>`:''}
+      ${!publicUnit&&xp.required?`<button type="button" class="ghost" data-use-xp-tome="${unit.uid}" ${xpTomes<1?'disabled':''}>Usar Tomo de XP (+250.000 XP) · ${xpTomes} disp.</button>`:''}
       <h3>Habilidade</h3><p><b>${stats.skill}</b><br>${SKILL_EFFECTS[stats.kind]}</p>
       ${stats.signatureAssist?'<p class="caption">Na Arena, também usa esta habilidade como assistência quando está na reserva.</p>':''}
       <h3>Efeito como líder</h3><p>${stats.leader}</p>
@@ -1101,7 +1101,7 @@ function renderPanel(){
       {name:'Essência de Despertar',qty:it.essence??0,desc:'Substitui cópias duplicadas para despertar personagens até ★5.',action:'<button class="ghost" data-tab="colecao">Despertar na ficha</button>'},
       {name:'Catalisador de Trait',qty:it.catalyst??0,desc:'Triplica a chance de 2–3 traits e garante raridade Rara+ no reroll.',action:''},
       {name:'Selo de Trava de Trait',qty:it.traitLock??0,desc:'Mantém 1 trait escolhida fixa durante um reroll no slot.',action:''},
-      {name:'Tomo de XP',qty:it.xpTome??0,desc:'Concede +25.000 XP instantâneo na ficha de qualquer personagem.',action:'<button class="ghost" data-tab="colecao">Usar na ficha</button>'},
+      {name:'Tomo de XP',qty:it.xpTome??0,desc:'Concede +250.000 XP instantâneo na ficha de qualquer personagem.',action:'<button class="ghost" data-tab="colecao">Usar na ficha</button>'},
       {name:'Elixir de Recuperação',qty:it.elixir??0,desc:'Zera imediatamente o tempo de recuperação da equipe.',action:`<button type="button" class="primary" id="use-elixir" ${(it.elixir??0)<1||!hasRec?'disabled':''}>${hasRec?'Usar Elixir agora':'Equipe recuperada'}</button>`},
     ];
     panel.innerHTML=`<article class="card"><h2>Inventário de Itens</h2><p class="caption">Itens consumíveis usados na ficha do personagem ou para acelerar o endgame.</p>
@@ -1118,7 +1118,7 @@ function renderPanel(){
     const toElite=state.area===2?(7-(state.index%7)):null;
     panel.innerHTML=`<div class="layout"><article class="card"><h2>Campanha</h2><p class="caption">${state.destination!==undefined?'Viagem após o combate atual.':`Mundo ${(state.world??0)+1} de ${WORLDS.length}`}</p>
     <div class="explore-meta"><label class="inline-toggle"><input type="checkbox" id="explore-auto-routes" ${state.autoRoutes?'checked':''}> Avançar áreas, chefes e mundos</label><span class="affinity-chip"><i class="color-dot" style="--hue:${COLORS[currentArea.color]}"></i> Contra <b>${currentArea.color}</b>: ${teamAffinitySummary(currentArea.color)}</span>${toElite!==null?`<span class="elite-chip">${toElite===1?'Próximo encontro: Elite':`Elite (${world.elite.name}) em ${toElite} lutas`}</span>`:''}</div>
-    <div class="area-list">${world.areas.map((a,i)=>`<button class="area-option" type="button" data-area="${i}" ${level<a.unlock?'disabled':''} aria-pressed="${state.area===i}"><span class="index-badge">${i+1}</span><span><strong>${a.name} <i class="color-dot" style="--hue:${COLORS[a.color]}" title="Cor do inimigo: ${a.color}"></i></strong><small>${a.description}</small></span><em>${level<a.unlock?`Libera no nv. ${a.unlock}`:`Nv. ${a.levels[0]}–${a.levels[1]}`}</em></button>`).join('')}</div></article><aside><article class="card boss"><h3>Chefe · ${world.boss.name} <small>Nv. ${world.boss.level}</small></h3><p class="caption boss-aff"><i class="color-dot" style="--hue:${COLORS[world.boss.color]}"></i> ${world.boss.color} · ${teamAffinitySummary(world.boss.color)}</p><div class="meter"><i style="width:${Math.min(100,state.finalWins/(state.bossGoal??12)*100)}%"></i></div><p class="caption">${state.completed?(state.world===9?'Campanha concluída.':'Próximo mundo disponível no menu de mundos.'):`${Math.min(state.bossGoal??12,state.finalWins)} / ${state.bossGoal??12} vitórias em ${world.areas[2].name}`}</p><button class="primary" data-action="boss" ${!readyForBoss(state)||state.pending?'disabled':''}>${state.completed?'Chefe derrotado':state.pending?'Aguarde o fim da luta':'Desafiar chefe'}</button></article><article class="card"><h3>Últimos encontros</h3>${efficiencySummary()}<ul class="activity">${state.log.length?state.log.slice(0,4).map(e=>`<li><span>${e.label}${e.reserveXp?`<small>+${e.reserveXp} XP entre reservas</small>`:''}</span><b ${!e.won?'class="loss"':''}>${e.won?`+${int.format(e.gold)} ouro`:'Derrota'}</b></li>`).join(''):'<li>Seus resultados aparecem aqui.</li>'}</ul></article></aside></div>`;
+    <div class="area-list">${world.areas.map((a,i)=>`<button class="area-option" type="button" data-area="${i}" ${level<a.unlock?'disabled':''} aria-pressed="${state.area===i}"><span class="index-badge">${i+1}</span><span><strong>${a.name} <i class="color-dot" style="--hue:${COLORS[a.color]}" title="Cor do inimigo: ${a.color}"></i></strong><small>${a.description}</small></span><em>${level<a.unlock?`Libera no nv. ${a.unlock}`:`Nv. ${a.levels[0]}–${a.levels[1]}`}</em></button>`).join('')}</div></article><aside><article class="card boss"><h3>Chefe · ${world.boss.name} <small>Nv. ${world.boss.level}</small></h3><p class="caption boss-aff"><i class="color-dot" style="--hue:${COLORS[world.boss.color]}"></i> ${world.boss.color} · ${teamAffinitySummary(world.boss.color)}</p><div class="meter"><i style="width:${Math.min(100,state.finalWins/(state.bossGoal??15)*100)}%"></i></div><p class="caption">${state.completed?(state.world===9?'Campanha concluída.':'Próximo mundo disponível no menu de mundos.'):`${Math.min(state.bossGoal??15,state.finalWins)} / ${state.bossGoal??15} vitórias em ${world.areas[2].name}`}</p><button class="primary" data-action="boss" ${!readyForBoss(state)||state.pending?'disabled':''}>${state.completed?'Chefe derrotado':state.pending?'Aguarde o fim da luta':'Desafiar chefe'}</button></article><article class="card"><h3>Últimos encontros</h3>${efficiencySummary()}<ul class="activity">${state.log.length?state.log.slice(0,4).map(e=>`<li><span>${e.label}${e.reserveXp?`<small>+${e.reserveXp} XP entre reservas</small>`:''}</span><b ${!e.won?'class="loss"':''}>${e.won?`+${int.format(e.gold)} ouro`:'Derrota'}</b></li>`).join(''):'<li>Seus resultados aparecem aqui.</li>'}</ul></article></aside></div>`;
   }else if(tab==='formacao'){
     if(!state.team.includes(selected))selected=state.team[0];
     const slots=formationSlots(state);
@@ -1196,7 +1196,7 @@ function renderPanel(){
       const locked=world>(state.unlocked??0)+1;
       const effect=index=>id==='sorte'?
         `${Math.min(50,upgrade.values[index])}% de recruta · +${Math.max(0,upgrade.values[index]-50)}% sobre a chance de Raro ou superior`:
-        `${id==='ouro'||id==='treino'?'+':''}${upgrade.values[index]}${upgrade.unit}`;
+        `${['ouro','treino','brilho','sintonia'].includes(id)?'+':''}${upgrade.values[index]}${upgrade.unit}`;
       return `<div class="upgrades-row"><div><h3>${upgrade.name} <small>Nível ${level} / ${upgrade.costs.length}</small></h3><p>${upgrade.description}</p><p class="upgrade-effect">${effect(level)}${price===undefined?'':` → ${effect(level+1)}`}</p></div><button class="primary" data-upgrade="${id}" aria-label="${upgrade.name} · ${price===undefined?'Nível máximo':`Comprar por ${int.format(price)} ouro`}" ${price===undefined||locked||state.gold<price?'disabled':''}>${price===undefined?'Nível máximo':`${int.format(price)} ouro${locked?' · Mundo '+world:''}`}</button></div>`;
     }).join('')}</article>`;
   }
@@ -1325,7 +1325,7 @@ document.addEventListener('click',e=>{
     return;
   }
   if(b.id==='use-elixir'){void transaction({type:'useElixir'}).then(ok=>{if(ok)note('Equipe recuperada instantaneamente!');});return;}
-  if(b.dataset.useXpTome){void transaction({type:'useXpTome',uid:b.dataset.useXpTome}).then(ok=>{if(ok)note('+25.000 XP aplicado!');});return;}
+  if(b.dataset.useXpTome){void transaction({type:'useXpTome',uid:b.dataset.useXpTome}).then(ok=>{if(ok)note('+250.000 XP aplicado!');});return;}
   if(b.dataset.awakenDup){
     const sac=$('#awaken-dup-select')?.value;
     if(sac&&confirm('Sacrificar a cópia selecionada + ouro para despertar este personagem?')){
