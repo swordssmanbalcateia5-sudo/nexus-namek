@@ -273,17 +273,18 @@ html[data-motion="off"] .arena *{animation:none!important;transition:none!import
 .topbar{border-bottom:1px solid var(--line);margin-bottom:4px}
 
 .rar-name.rarity-8{--name-first:#79ebef;--name-second:#f3a7ff;color:#79ebef}
-.rar-name.rarity-9{--name-first:#ffcf70;--name-second:#b4adff;color:#ffcf70}
+.rar-name.rarity-9{--name-first:#ffcf70;--name-second:#000;color:#ffcf70}
 @supports (background-clip:text){
   .rar-name:is(.rarity-8,.rarity-9){
     background:linear-gradient(100deg,var(--name-first),var(--name-second),var(--name-first)) 0 50%/220% 100%;
     background-clip:text;color:transparent;animation:rarity-name-flow 4s ease-in-out infinite alternate
   }
+  .rar-name.rarity-9{-webkit-text-stroke:.5px #ffcf70}
 }
 @keyframes rarity-name-flow{to{background-position:100% 50%}}
 html[data-motion="off"] .rar-name{animation:none}
 @media(prefers-reduced-motion:reduce){.rar-name:is(.rarity-8,.rarity-9){animation:none}}
-@media(forced-colors:active){.rar-name:is(.rarity-8,.rarity-9){background:none;color:CanvasText;animation:none}}
+@media(forced-colors:active){.rar-name:is(.rarity-8,.rarity-9){background:none;color:CanvasText;-webkit-text-stroke:0;animation:none}}
 </style>
 </head>
 <body>
