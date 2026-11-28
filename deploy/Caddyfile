@@ -1,0 +1,5 @@
+# /etc/caddy/Caddyfile — HTTPS automático (Let's Encrypt) na frente do Node.
+jogo.exemplo.com.br {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4173
+}

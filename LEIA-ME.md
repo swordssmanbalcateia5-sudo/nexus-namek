@@ -12,6 +12,10 @@ Duas pessoas em computadores diferentes precisam acessar a mesma instância. Par
 
 O banco padrão fica em `data/nexus.sqlite`. O ouro, o inventário, os encontros, os upgrades, os perfis e as amizades online ficam no servidor. Não compartilhe o banco ou os códigos de acesso privados. O código de amigo pode ser compartilhado. O tempo de jogo conta os intervalos de interação e sincronização enquanto o jogo está visível. Encontros AFK concluídos entram na contagem de encontros.
 
+## Hospedagem em VM (AWS, Oracle)
+
+`npm start` sobe o servidor Node com o mesmo `public/_worker.js` do Cloudflare, usando SQLite local no lugar do D1. O passo a passo de deploy, migração dos dados do D1 e backups está em [deploy/DEPLOY-VM.md](deploy/DEPLOY-VM.md).
+
 ## Comunidade
 
 - **Raridade** ordena os personagens com chance de obtenção registrada. `1/100M` significa uma chance em cem milhões. O valor completo aparece ao passar o cursor sobre a abreviação.
