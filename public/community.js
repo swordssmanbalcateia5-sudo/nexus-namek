@@ -99,7 +99,7 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
         const reference=[data?.code,data?.ray??response.headers.get('CF-Ray')].filter(Boolean).join(' · ');
         const error=new Error((data?.error??'O servidor do Alca RNG respondeu com HTTP '+response.status+'.')+(reference?' Referência: '+reference:''));
         error.status=response.status;
-        if(path==='/game'&&[502,503,504].includes(response.status))conservativeRecoveryUntil=Date.now()+120000;
+        if(path==='/game'&&[502,503,504].includes(response.status))conservativeRecoveryUntil=Date.now()+30000;
         if(path==='/game'&&([429,502,503,504].includes(response.status)||data?.code==='SYNC_CONTENTION'))deferSync(error,response.headers.get('Retry-After'));
         throw error;
       }
@@ -112,7 +112,7 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
         const connectionError=new Error(controller.signal.aborted?'O servidor demorou para responder. Tente novamente.':
           'O navegador não conseguiu acessar o servidor do Alca RNG. Verifique a conexão.');
         if(path==='/game'){
-          if(controller.signal.aborted)conservativeRecoveryUntil=Date.now()+120000;
+          if(controller.signal.aborted)conservativeRecoveryUntil=Date.now()+30000;
           deferSync(connectionError);
         }
         throw connectionError;

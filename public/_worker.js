@@ -4782,7 +4782,7 @@ function applyGameAction(state,action,now){
 }
 return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAIT_MIGRATION,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,MAX_STARS,TRAIT_PITY_LIMIT,PRESET_SLOTS,PRESET_LABELS,RAID_MILESTONES,WORLD_BOSS_MILESTONES,TOWER_AFFIXES,WEEKLY_TOWER_FLOORS,WEEKLY_TOWER_RULES,raidClaims,worldBossClaims,grantItems,awakenCost,dexMastery,slotTraits,loadoutChance,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,describeAutoSell,advance,AWAY_THRESHOLD,AFK_ENCOUNTER_LIMIT,advanceWithPresence,startExploration,TOWER_LIMIT,towerPrize,towerAffix,raidToday,weeklyTowerToday,towerEnemies,weeklyTowerEnemies,challenge,formationSlots,formationCost,equip,unitPower,formationPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,dexSummary,canSellUnit,duplicateSellCandidates,sellUnit,goldShopPrice,resolveDefenseSquad,applyGameAction};
 })();
-const {serialSchema,issueSerials} =serials;
+const {serialSchema} =serials;
 const {advance,advanceWithPresence,applyGameAction,fighter,fresh,CHARACTERS,dexMastery,resolveDefenseSquad,WORLD_BOSS_MILESTONES,worldBossClaims} =game;
 const {dailyCycle,weeklyCycle,arenaLeague,DEFAULT_PROFILE,appearancePatch,PROFILE_BODY_LIMIT,GIFT_GOLD} =communityRules;
 
@@ -4872,7 +4872,9 @@ const schemas=[
   END`
 ];
 const initialized=new WeakSet();
-const SCHEMA_VERSION=3;
+const SCHEMA_VERSION=4;
+// Os seriais agora são reservados por allocateSerials, sem trava global; os gatilhos antigos saem.
+const retiredSchema=['DROP TRIGGER IF EXISTS nexus_issue_0','DROP TRIGGER IF EXISTS nexus_issue_1'];
 async function initialize(db){
   if(initialized.has(db))return;
   let schema;
@@ -4883,7 +4885,7 @@ async function initialize(db){
     if(!/no such table: (?:main\.)?nexus_schema_version\b/i.test(String(error?.message)))throw error;
   }
   if(!schema||schema.version<SCHEMA_VERSION){
-    const migration=[...schemas,...serialSchema('nexus_players',true),
+    const migration=[...schemas,...serialSchema('nexus_players',true),...retiredSchema,
       'CREATE TABLE IF NOT EXISTS nexus_schema_version(id INTEGER PRIMARY KEY,version INTEGER NOT NULL)',
       'INSERT INTO nexus_schema_version(id,version) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=max(version,excluded.version)'];
     await db.batch(migration.map((sql,i)=>i===migration.length-1?db.prepare(sql).bind(SCHEMA_VERSION):db.prepare(sql)));
@@ -4894,6 +4896,23 @@ const hex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 const random=count=>crypto.getRandomValues(new Uint8Array(count));
 const hash=async value=>hex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))));
 const publicPlayer=({id,name,code})=>({id,name,code});
+// Reserva os próximos números de cada personagem num único UPDATE atômico.
+// Antes, cada gravação exigia que o contador global não tivesse mudado, e o recrutamento de
+// qualquer jogador fazia as sincronizações simultâneas falharem com SYNC_CONTENTION.
+// Se a gravação do jogador falhar depois da reserva, os números ficam sem dono (como nas vendas).
+async function allocateSerials(db,units){
+  if(!units.length)return;
+  const kind=unit=>unit.id+(unit.shiny?'-shiny':'');
+  const wanted={};
+  for(const unit of units)wanted[kind(unit)]=(wanted[kind(unit)]??0)+1;
+  const row=await db.prepare(`UPDATE nexus_serials SET revision=revision+1,counts=json_patch(counts,
+    (SELECT json_group_object(n.key,coalesce(json_extract(counts,'$."'||n.key||'"'),0)+n.value) FROM json_each(?) n))
+    WHERE id=1 RETURNING counts`).bind(JSON.stringify(wanted)).first();
+  if(!row)reject(503,'O contador de seriais está indisponível.','SERIALS_UNAVAILABLE');
+  const counts=JSON.parse(row.counts),next={};
+  for(const key in wanted)next[key]=counts[key]-wanted[key];
+  for(const unit of units)unit.serial=++next[kind(unit)];
+}
 function summarize(unit,mastery=null){
   const stats=fighter(unit,undefined,null,false,mastery);
   const power=['hp','attack','magic','defense','resistance','speed'].reduce((sum,k)=>sum+stats[k],0);
@@ -4917,17 +4936,18 @@ async function register(db,input,request){
   const state=fresh(now,hex(random(32)));
   const tokenHash=await hash(token);
   const id=crypto.randomUUID();
+  const limit=()=>reject(429,'Limite temporário de criação de contas atingido.');
+  if((await db.prepare('SELECT count(*) AS n FROM nexus_players WHERE reg_key=?').bind(regKey).first()).n>=20)limit();
+  await allocateSerials(db,state.collection);
+  const ranks=rankedUnits(state.collection,dexMastery(state));
   for(let attempt=0;attempt<3;attempt++){
-    const counter=await db.prepare('SELECT * FROM nexus_serials WHERE id=1').first();
-    issueSerials(state,state.collection,counter);
-    const ranks=rankedUnits(state.collection,dexMastery(state));
     const code=hex(random(5)).toUpperCase();
     const inserted=await db.prepare(`INSERT INTO nexus_players(id,code,token_hash,name,game,appearance,reg_key,power,top_units,rare_units)
-      SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT revision FROM nexus_serials WHERE id=1)=? AND (SELECT count(*) FROM nexus_players WHERE reg_key=?)<20
-      ON CONFLICT(code) DO NOTHING RETURNING id`).bind(id,code,tokenHash,name,JSON.stringify(state),JSON.stringify(DEFAULT_PROFILE),regKey,...ranks,counter.revision,regKey).first();
+      SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM nexus_players WHERE reg_key=?)<20
+      ON CONFLICT(code) DO NOTHING RETURNING id`).bind(id,code,tokenHash,name,JSON.stringify(state),JSON.stringify(DEFAULT_PROFILE),regKey,...ranks,regKey).first();
     if(inserted){invalidateRankings(db);return {token,player:{id,name,code}};}
     const count=await db.prepare('SELECT count(*) AS n FROM nexus_players WHERE reg_key=?').bind(regKey).first();
-    if(count.n>=20)reject(429,'Limite temporário de criação de contas atingido.');
+    if(count.n>=20)limit();
   }
   reject(503,'Tente criar o perfil novamente.','REGISTRATION_CONTENTION');
 }
@@ -5038,16 +5058,19 @@ async function sync(db,id,body){
   if(changed&&body.action.type==='raid'&&state.ballRun?.damage>0)
     state.ballRun.worldBossWeek=weeklyCycle(now).week;
   if(changed)entries.push(...advance(state,now));
-  const units=entries.map(e=>e.recruit||e.sold).filter(Boolean);
-  const counter=units.length?await db.prepare('SELECT * FROM nexus_serials WHERE id=1').first():null;
-  issueSerials(state,units,counter);
+  delete state.issuance;
+  await allocateSerials(db,entries.map(e=>e.recruit||e.sold).filter(Boolean));
   const delta=now-(row.last_seen??now);
   const played=delta>0&&delta<=30000?delta:0;
-  const ranks=JSON.stringify(state.collection)===previousCollection?[]:rankedUnits(state.collection,dexMastery(state));
+  // O ranking percorre a coleção inteira. Na recuperação em lotes, calcula só no último lote.
+  const collectionChanged=JSON.stringify(state.collection)!==previousCollection;
+  let ranks=[];
+  if(partial){if(collectionChanged)state.ranksStale=true;}
+  else if(collectionChanged||state.ranksStale){delete state.ranksStale;ranks=rankedUnits(state.collection,dexMastery(state));}
   const rankFields=ranks.length?'power=?,top_units=?,rare_units=?,':'';
   const result=await db.prepare(`UPDATE nexus_players SET game=?,play_ms=play_ms+?,last_seen=?,
-    ${rankFields}revision=revision+1 WHERE id=? AND revision=? AND (? IS NULL OR (SELECT revision FROM nexus_serials WHERE id=1)=?)`)
-    .bind(JSON.stringify(state),played,body.visible===true?now:null,...ranks,id,row.revision,counter?.revision??null,counter?.revision??null).run();
+    ${rankFields}revision=revision+1 WHERE id=? AND revision=?`)
+    .bind(JSON.stringify(state),played,body.visible===true?now:null,...ranks,id,row.revision).run();
   if(!result.meta.changes)reject(409,'A campanha está sendo atualizada. Tente novamente.','SYNC_CONTENTION');
   if(changed||entries.length)invalidateRankings(db);
   if(partial){
