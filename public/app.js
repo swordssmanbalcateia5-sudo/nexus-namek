@@ -44,6 +44,9 @@ let tab=validTabs.includes(location.hash.slice(1))?location.hash.slice(1):'explo
 let replay=null, finishedBattle=null, eventCursor=0, stageKey='', busy=false, drag=null, installPrompt=null;
 let transactionQueue=Promise.resolve();
 let queuedSync=null;
+const ONLINE_SYNC_MIN_MS=10000;
+const ONLINE_HEARTBEAT_MS=24000+Math.random()*1000;
+let lastOnlineSyncAt=-Infinity;
 let publicUnit=null, profileUid=null, profileOpener=null, profileContent='';
 let serverOffset=0;
 const gameNow=()=>Date.now()+serverOffset;
@@ -574,6 +577,7 @@ function transaction(action,offline=false){
           if(!autoFormation(draft,action.mode,gameNow()))return;
           onlineAction={...action,team:draft.team,leader:draft.leader};
         }
+        lastOnlineSyncAt=performance.now();
         const data=await community.game(onlineAction,age);
         if(!data)return;
         sentObservation=observed;
@@ -1326,12 +1330,16 @@ function drawScene(now){
   const recoverAt=Math.min(...state.team.map(uid=>readyAt(state,uid)));
   const recovering=!battle&&state.running&&state.team.length&&recoverAt>now;
   const waiting=state.team.length>0&&state.running&&!activeBattle;
-  $('#arena-status').textContent=finish?(finish.entry.won?'VITÓRIA':'DERROTA'):battle?.boss?'DESAFIO DE CHEFE':battle?.elite?'ENCONTRO DE ELITE':battle?'EM COMBATE':recovering?'EM RECUPERAÇÃO':waiting?'PRÓXIMO ENCONTRO':state.team.length?'EXPLORAÇÃO PARADA':'FORMAÇÃO VAZIA';
+  const confirming=activeBattle&&now>=activeBattle.end;
+  const nextOnlineEncounter=confirming&&community.ready()&&state.running&&!activeBattle.boss
+    ? Math.max(0,activeBattle.end+waitFor(state)-now)
+    : 0;
+  $('#arena-status').textContent=finish?(finish.entry.won?'VITÓRIA':'DERROTA'):confirming?'FINALIZANDO ENCONTRO':battle?.boss?'DESAFIO DE CHEFE':battle?.elite?'ENCONTRO DE ELITE':battle?'EM COMBATE':recovering?'EM RECUPERAÇÃO':waiting?'PRÓXIMO ENCONTRO':state.team.length?'EXPLORAÇÃO PARADA':'FORMAÇÃO VAZIA';
   $('#world-title').textContent=world.name;
   $('.arena').dataset.world=String(battle?.world??state.world??0);
   $('#arena-location').textContent=world.areas[battle?.area??state.area].name;
-  $('#arena-time').textContent=time(activeBattle?elapsed:recovering?recoverAt-now:waiting?state.nextAt-now:0);
-  $('#arena-label').textContent=finish?(finish.entry.won?`+${int.format(finish.entry.gold)} ouro · +${finish.entry.xp} XP por titular${finish.entry.reserveXp?` · +${finish.entry.reserveXp} XP entre reservas`:''}`:`Derrota contra ${battle.enemy.name}`):battle?`Enfrentando ${battle.enemy.name}`:recovering?'Aguardando a recuperação da equipe.':waiting?'O time está procurando um adversário.':state.team.length?'Exploração parada. Clique em Explorar para retomar.':'Coloque um personagem na formação para explorar.';
+  $('#arena-time').textContent=time(confirming?nextOnlineEncounter:activeBattle?elapsed:recovering?recoverAt-now:waiting?state.nextAt-now:0);
+  $('#arena-label').textContent=finish?(finish.entry.won?`+${int.format(finish.entry.gold)} ouro · +${finish.entry.xp} XP por titular${finish.entry.reserveXp?` · +${finish.entry.reserveXp} XP entre reservas`:''}`:`Derrota contra ${battle.enemy.name}`):confirming?(nextOnlineEncounter>0?'Resultado no próximo sincronismo.':'Aguardando a confirmação do resultado.'):battle?`Enfrentando ${battle.enemy.name}`:recovering?'Aguardando a recuperação da equipe.':waiting?'O time está procurando um adversário.':state.team.length?'Exploração parada. Clique em Explorar para retomar.':'Coloque um personagem na formação para explorar.';
   $('#fight-progress').style.width=`${battle?100*elapsed/duration:waiting?Math.max(0,Math.min(100,100*(1-(state.nextAt-now)/(state.waitDuration||waitFor(state))))):0}%`;
   const paused=isPaused();
   const toggle=$('#explore-toggle');
@@ -1603,7 +1611,10 @@ function observe(){
   if(returned||state.awayReports?.length&&!$('#away-dialog').open)void transaction(null,true);
 }
 for(const event of ['pointerdown','keydown','pointermove','wheel'])document.addEventListener(event,observe,{passive:true});
-addEventListener('focus',()=>{observe();void transaction(null,true);});
+addEventListener('focus',()=>{
+  observe();
+  if(!community.active())void transaction(null,true);
+});
 $('#away-dialog').addEventListener('cancel',event=>{event.preventDefault();$('#away-continue').click();});
 $('#away-continue').addEventListener('click',()=>{const report=state.awayReports?.[0];if(report)void transaction({type:'dismissAway',end:report.end});});
 if(!initialSave&&!storageIssue&&!community?.active()&&location.protocol==='file:'){
@@ -1618,7 +1629,16 @@ setInterval(()=>{
     if(!loginRequired&&!busy&&community.syncAvailable()&&Date.now()-saveTick>=10000){saveTick=Date.now();void transaction(null);}
     return;
   }
-  if(!busy&&community.syncAvailable()&&(state.pending?.end<=now||state.team.length&&state.running&&!state.pending&&Math.max(state.nextAt,Math.min(...state.team.map(uid=>readyAt(state,uid))))<=now||Date.now()-saveTick>(community?.ready()?8000:12000))){
+  // For online exploration, collect the last result and start the next battle in one sync.
+  const batchNextEncounter=community.ready()&&state.running&&state.pending&&!state.pending.boss;
+  const encounterDue=state.pending
+    ? state.pending.end+(batchNextEncounter?waitFor(state):0)<=now
+    : state.team.length>0&&state.running&&Math.max(state.nextAt,Math.min(...state.team.map(uid=>readyAt(state,uid))))<=now;
+  const sinceOnlineSync=performance.now()-lastOnlineSyncAt;
+  const syncDue=community.ready()
+    ? sinceOnlineSync>=ONLINE_SYNC_MIN_MS&&(encounterDue||sinceOnlineSync>=ONLINE_HEARTBEAT_MS)
+    : encounterDue||Date.now()-saveTick>12000;
+  if(!busy&&community.syncAvailable()&&syncDue){
     saveTick=Date.now();void transaction(null,now-state.clock>45000).then(()=>{
       if(tab==='exploracao'&&($('#panel [data-action="boss"]')?.disabled??true)!==(!readyForBoss(state)||!!state.pending))renderPanel();
     });

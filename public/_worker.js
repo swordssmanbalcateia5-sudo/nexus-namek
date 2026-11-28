@@ -3434,7 +3434,7 @@ const SKILL_EFFECTS = {
 SKILL_EFFECTS.ward=SKILL_EFFECTS.piccolo;
 SKILL_EFFECTS.rush=SKILL_EFFECTS.yamcha;
 const recruitPools = TIERS.map((_,i)=>Object.values(CHARACTERS).filter(c=>c.tier===i+1));
-const chanceByTier = [.55,.27,.12,.045,.012,.0025,.00045,.00005];
+const chanceByTier = [.57,.27,.112,.038,.008,.00165,.00032,.00003];
 const passives={
   'Haki do Rei':'Ao iniciar a luta, trava as ações inimigas por 1,5 s e aumenta o dano sofrido por eles em +15%. Uma ativação por equipe.',
   'Kaidō':'Inicia o combate com um escudo protetor equivalente a 18% dos PV máximos.',
@@ -3472,11 +3472,11 @@ const initial = ['piccolo','yamcha','kuririn','bulma'];
 const position = [[72,47],[56,72],[39,28],[22,59]];
 const HOUR = 3600000;
 const UPGRADES = {
-  ritmo:{name:'Ritmo de expedição',worlds:[1,2,4,6,8,10],costs:[120,1800,15000,80000,240000,350000],values:[10,9,8,7,6,5,4.5],unit:' s',description:'Reduz a espera entre encontros.'},
+  ritmo:{name:'Ritmo de expedição',worlds:[1,2,4,6,8,10],costs:[120,1800,15000,80000,240000,350000],values:[16,15,14,13,12,11,10],unit:' s',description:'Reduz a espera entre encontros.'},
   sorte:{name:'Sorte',worlds:[1,1,1,2,3,5,7,8,10],costs:[50,125,300,1000,3500,12000,36000,90000,200000],values:[10,20,30,40,50,60,70,80,90,100],unit:'%',description:'Até 50%, aumenta a chance de encontrar um recruta em lutas comuns. Cada ponto acima de 50% aumenta em 1% relativo a chance de esse recruta ser Raro ou superior.'},
   ouro:{name:'Bônus de ouro',worlds:[1,1,1,2,4,6,8],costs:[75,180,400,2000,18000,90000,250000],values:[0,10,20,35,50,65,80,100],unit:'%',description:'Acrescenta ouro às vitórias em encontros comuns e de elite.'},
   xp:{name:'Experiência compartilhada',worlds:[1,1,1,2,4,6,8],costs:[60,150,325,1600,14000,75000,210000],values:[0,25,40,60,70,80,90,100],unit:'%',description:'Distribui entre os reservas uma fração da XP que um titular recebe por vitória. Cada titular mantém sua recompensa integral.'},
-  rastreio:{name:'Rastreio de raros',worlds:[1,2,4,6,9,10],costs:[100,600,4500,24000,100000,250000],values:[18,20,24,28,32,36,40],unit:'%',description:'Chance de um recruta ser de raridade Rara ou superior. Cada uma dessas raridades recebe o mesmo aumento proporcional.'},
+  rastreio:{name:'Rastreio de raros',worlds:[1,2,4,6,9,10],costs:[100,600,4500,24000,100000,250000],values:[16,18,21,24,28,32,36],unit:'%',description:'Chance de um recruta ser de raridade Rara ou superior. Cada uma dessas raridades recebe o mesmo aumento proporcional.'},
   treino:{name:'Treino de combate',worlds:[1,2,4,7,9,10],costs:[80,700,5000,30000,70000,140000],values:[0,10,20,30,40,60,80],unit:'%',description:'Aumenta a XP por vitória na campanha. O bônus também entra no cálculo da experiência compartilhada.'},
   enfermaria:{name:'Enfermaria',worlds:[1,3,5,8,9,10],costs:[90,1000,6500,45000,70000,140000],values:[20,18,16,14,12,10,8],unit:' s',description:'Reduz o tempo de recuperação de titulares derrotados na exploração, inclusive quando a equipe inteira cai.'},
   brilho:{name:'Caçador de Shinies',worlds:[4,6,8,10],costs:[8000,40000,160000,450000],values:[0,10,20,35,50],unit:'%',description:'Aumenta proporcionalmente a chance de encontrar variantes Shiny em recrutamentos.'},
@@ -4788,7 +4788,7 @@ class ApiError extends Error {
   constructor(status,message,code){super(message);this.status=status;this.code=code;}
 }
 function reject(status,message,code){throw new ApiError(status,message,code);}
-const BUILD='nexus-namek-58';
+const BUILD='nexus-namek-59';
 const RANKINGS_TTL=15000;
 const rankingsCache=new WeakMap();
 const invalidateRankings=db=>rankingsCache.delete(db);
@@ -5039,7 +5039,7 @@ async function sync(db,id,body){
   const counter=units.length?await db.prepare('SELECT * FROM nexus_serials WHERE id=1').first():null;
   issueSerials(state,units,counter);
   const delta=now-(row.last_seen??now);
-  const played=delta>0&&delta<=20000?delta:0;
+  const played=delta>0&&delta<=30000?delta:0;
   const ranks=JSON.stringify(state.collection)===previousCollection?[]:rankedUnits(state.collection,dexMastery(state));
   const rankFields=ranks.length?'power=?,top_units=?,rare_units=?,':'';
   const result=await db.prepare(`UPDATE nexus_players SET game=?,play_ms=play_ms+?,last_seen=?,

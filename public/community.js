@@ -123,7 +123,7 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
   async function synchronize(body,access){
     const current=generation;
     const observedAt=Number.isFinite(body.observationAge)?Date.now()-body.observationAge:null;
-    let processed=0,checkpoints=0;
+    let processed=0;
     while(current===generation){
       const data=await request('/game',{...body,checkpoints:true,
         conservativeRecovery:Date.now()<conservativeRecoveryUntil,
@@ -134,8 +134,7 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
       if(message)message.textContent=processed
         ?'Recuperando progresso offline… '+number.format(processed)+' encontros processados.'
         :'Recuperando progresso offline…';
-      if(++checkpoints%4===0)
-        await new Promise(resolve=>setTimeout(resolve,40+Math.random()*60));
+      await new Promise(resolve=>setTimeout(resolve,150+Math.random()*200));
     }
     return null;
   }
