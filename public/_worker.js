@@ -5016,7 +5016,10 @@ async function authenticate(db,request){
   if(!row)reject(401,'Código de acesso inválido.');
   return row.id;
 }
+// Fora do Cloudflare (VM), RECOVERY_BATCH libera lotes grandes: não há limite de 10 ms de CPU.
+let recoveryLimit=0;
 function recoveryBatchSize(state,now,conservative){
+  if(recoveryLimit>0)return conservative?Math.min(recoveryLimit,60):recoveryLimit;
   if(conservative||now-state.clock<=30000)return 6;
   const size=state.collection.length;
   return size<=250?18:size<=750?12:6;
@@ -5053,7 +5056,7 @@ async function sync(db,id,body){
   if(partial){
     if(body.checkpoints!==true)reject(409,'Atualize a página para continuar a recuperação da campanha.','CLIENT_UPDATE_REQUIRED');
     const awayLimit=(state.awayWindow?.start??state.clock)+12*3600000;
-    return {catchingUp:true,processed:entries.length,remaining:Math.max(1,Math.min(now,awayLimit)-state.clock)};
+    return {catchingUp:true,processed:entries.length,retryIn:recoveryLimit>0?0:null,remaining:Math.max(1,Math.min(now,awayLimit)-state.clock)};
   }
   delete state.seed;
   return {state,changed,finished,now,player:publicPlayer(row),entries:entries.slice(-25),
@@ -5346,6 +5349,7 @@ export default {
     let stage='binding';
     try{
       const db=env.NEXUS_DB;
+      recoveryLimit=Math.max(0,Math.floor(Number(env.RECOVERY_BATCH))||0);
       if(!db)reject(503,'O banco da campanha está indisponível neste ambiente.','D1_BINDING_MISSING');
       if(request.method==='GET'&&path==='/api/health'){
         stage='health';

@@ -134,7 +134,9 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
       if(message)message.textContent=processed
         ?'Recuperando progresso offline… '+number.format(processed)+' encontros processados.'
         :'Recuperando progresso offline…';
-      await new Promise(resolve=>setTimeout(resolve,150+Math.random()*200));
+      // O servidor da VM responde retryIn:0; no Cloudflare mantém a pausa entre lotes.
+      const pause=Number.isFinite(data.retryIn)?data.retryIn:150+Math.random()*200;
+      if(pause>0)await new Promise(resolve=>setTimeout(resolve,pause));
     }
     return null;
   }

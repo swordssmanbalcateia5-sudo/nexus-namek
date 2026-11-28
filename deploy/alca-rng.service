@@ -1,0 +1,22 @@
+[Unit]
+Description=Alca RNG (servidor Node.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alca
+WorkingDirectory=/opt/alca-rng
+EnvironmentFile=/etc/alca-rng.env
+ExecStart=/usr/bin/node server/server.mjs
+Restart=always
+RestartSec=3
+# Endurecimento básico
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/alca-rng
+
+[Install]
+WantedBy=multi-user.target
