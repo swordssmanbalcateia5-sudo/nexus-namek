@@ -44,7 +44,7 @@ let tab=validTabs.includes(location.hash.slice(1))?location.hash.slice(1):'explo
 let replay=null, finishedBattle=null, eventCursor=0, stageKey='', busy=false, drag=null, installPrompt=null;
 let transactionQueue=Promise.resolve();
 let queuedSync=null;
-const ONLINE_SYNC_MIN_MS=10000;
+const ONLINE_SYNC_MIN_MS=8000;
 const ONLINE_HEARTBEAT_MS=24000+Math.random()*1000;
 let lastOnlineSyncAt=-Infinity;
 let publicUnit=null, profileUid=null, profileOpener=null, profileContent='';

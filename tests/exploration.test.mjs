@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {CHARACTERS,fresh,makeBattle,advance,recruitRates,rollRecruit,waitFor} from '../public/game.js';
+import {CHARACTERS,fresh,makeBattle,advance,buyUpgrade,recruitRates,rollRecruit,waitFor} from '../public/game.js';
 
-test('Ritmo mantém uma espera mínima de dez segundos com todos os upgrades',()=>{
+test('Ritmo mantém uma espera mínima de oito segundos com todos os upgrades',()=>{
   const state=fresh(1000,7);
-  assert.equal(waitFor(state),16000);
+  assert.equal(waitFor(state),15000);
   state.upgrades.ritmo=6;
-  assert.equal(waitFor(state),10000);
+  assert.equal(waitFor(state),8000);
   const battle=makeBattle(state,1000);
   state.pending=battle;
   advance(state,battle.end);
-  assert.equal(state.nextAt,battle.end+10000);
+  assert.equal(state.nextAt,battle.end+8000);
 });
 
 test('raridade máxima depende do Rastreio e do excedente de Sorte',()=>{
@@ -26,4 +26,27 @@ test('raridade máxima depende do Rastreio e do excedente de Sorte',()=>{
   assert.equal(tier(.4601,1,36),3);
   assert.equal(tier(.99996,.1,16),7);
   assert.equal(tier(.99998,.1,16),8);
+});
+
+test('Ritmo exige ouro e mundo desbloqueado em cada etapa',()=>{
+  const state=fresh(1000,7);
+  const levels=[[1,180,14],[2,1200,13],[4,6000,12],[6,18000,10.5],[8,45000,9],[10,100000,8]];
+  for(const [world,price,seconds] of levels){
+    state.unlocked=world-1;
+    state.gold=price-1;
+    assert.equal(buyUpgrade(state,'ritmo'),false);
+    state.gold=price;
+    if(world>1){
+      state.unlocked--;
+      assert.equal(buyUpgrade(state,'ritmo'),false);
+      state.unlocked++;
+    }
+    assert.equal(buyUpgrade(state,'ritmo'),true);
+    assert.equal(state.gold,0);
+    assert.equal(waitFor(state),seconds*1000);
+  }
+  state.gold=1000000;
+  state.unlocked=11;
+  assert.equal(buyUpgrade(state,'ritmo'),false);
+  assert.equal(waitFor(state),8000);
 });
