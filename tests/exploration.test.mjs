@@ -5,7 +5,7 @@ import {CHARACTERS,fresh,makeBattle,advance,buyUpgrade,recruitRates,rollRecruit,
 test('Ritmo mantém uma espera mínima de oito segundos com todos os upgrades',()=>{
   const state=fresh(1000,7);
   assert.equal(waitFor(state),15000);
-  state.upgrades.ritmo=6;
+  state.upgrades.ritmo=10;
   assert.equal(waitFor(state),8000);
   const battle=makeBattle(state,1000);
   state.pending=battle;
@@ -30,7 +30,10 @@ test('raridade máxima depende do Rastreio e do excedente de Sorte',()=>{
 
 test('Ritmo exige ouro e mundo desbloqueado em cada etapa',()=>{
   const state=fresh(1000,7);
-  const levels=[[1,180,14],[2,1200,13],[4,6000,12],[6,18000,10.5],[8,45000,9],[10,100000,8]];
+  const levels=[
+    [1,180,14.5],[2,1000,14],[3,3500,13.5],[4,9000,13],[5,20000,12.5],
+    [6,40000,12],[7,70000,11],[8,120000,10],[9,200000,9],[10,350000,8]
+  ];
   for(const [world,price,seconds] of levels){
     state.unlocked=world-1;
     state.gold=price-1;
