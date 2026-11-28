@@ -600,6 +600,16 @@ export const WEEKLY_TOWER_RULES=[
   {id:'tactical',name:'Guardiões & Suportes',desc:'Apenas Guardiões e Suportes entram em campo.',allow:c=>['Guardião','Suporte'].includes(c.role)},
 ];
 
+// Build 57 stored claims by the old damage thresholds, in the same reward order.
+function normalizeClaims(claimed,milestones,oldThresholds){
+  return [...new Set(claimed.map(damage=>{
+    const index=oldThresholds.indexOf(damage);
+    return index<0?damage:milestones[index].damage;
+  }))];
+}
+export const raidClaims=claimed=>normalizeClaims(claimed,RAID_MILESTONES,[50000,250000,750000,2000000,5000000]);
+export const worldBossClaims=claimed=>normalizeClaims(claimed,WORLD_BOSS_MILESTONES,[500000,2000000,10000000,50000000,200000000]);
+
 export function grantItems(state,bundle){
   if(!bundle)return;
   if(bundle.gold)state.gold=(state.gold??0)+bundle.gold;
@@ -912,30 +922,65 @@ function shareExperience(state,battle,xp){
   return granted;
 }
 
+const legacyTraitOdds={"Concentração Total": 4, "Reforço Amaldiçoado": 5, "Haki do Armamento": 10, "Ten": 10, "Kaidō": 20, "Shunpo": 20, "Modo Sábio": 25, "Respiração do Trovão": 25, "Haki do Rei": 50, "Instinto Superior": 100, "Restrição Celestial": 125, "Haki da Observação": 125, "Zenkai": 200, "Full Counter": 250, "The World": 500, "Voto de Nen": 1000, "Made in Heaven": 2000};
+
 export function saleSettings(saved){
-  // Older backups can contain only the filters that were configured.
+  // Novo sistema simplificado de Auto-Sell, com retrocompatibilidade para saves antigos.
   const list=value=>Array.isArray(value)?value:[];
-  const tiers=list(saved?.tiers).map(Number).filter(i=>Number.isInteger(i)&&i>=1&&i<=TIERS.length);
-  const characters=list(saved?.characters).filter(id=>Object.hasOwn(CHARACTERS,id));
-  const traitRules={};
-  for(const [tier,rule] of Object.entries(saved?.traitRules??{})){
-    if(!TIERS[Number(tier)-1]||!rule)continue;
-    const below=Number(rule.below);
-    traitRules[tier]={
-      below:Number.isInteger(below)&&below>=0&&below<=1000000?below:0,
-      names:list(rule.names).filter(name=>TRAITS.some(t=>t.name===name))
-    };
-  }
-  return {enabled:saved?.enabled===true,tiers:[...new Set(tiers)],characters:[...new Set(characters)],traitRules};
+  const tiers=[...new Set(list(saved?.tiers).map(Number).filter(i=>Number.isInteger(i)&&i>=1&&i<=TIERS.length))].sort((a,b)=>a-b);
+  const keepCharacters=[...new Set(list(saved?.keepCharacters).filter(id=>Object.hasOwn(CHARACTERS,id)))];
+  const shinyRule=['all','first','none'].includes(saved?.shinyRule)?saved.shinyRule:'all';
+  const keepFirstNormal=saved?.keepFirstNormal!==false;
+  const rawMin=Number(saved?.minTraitTier);
+  const minTraitTier=Number.isInteger(rawMin)&&rawMin>=1&&rawMin<=9?rawMin:1;
+  const old=saved?.legacy??(saved?.characters||saved?.traitRules?saved:null);
+  const settings={enabled:saved?.enabled===true,tiers,keepFirstNormal,shinyRule,minTraitTier,keepCharacters};
+  if(old)settings.legacy={characters:list(old.characters),traitRules:old.traitRules??{}};
+  return settings;
 }
 
-function saleMatches(settings,unit){
+export function describeAutoSell(saved){
+  const s=saleSettings(saved);
+  if(!s.enabled)return 'Venda automática desligada. Todos os novos recrutas entram na coleção.';
+  if(!s.tiers.length)return 'Ligada, mas nenhuma raridade selecionada para venda.';
+  const tierNames=s.tiers.map(i=>TIERS[i-1]).join(', ');
+  const prot=[];
+  if(s.keepFirstNormal)prot.push('1ª cópia normal de cada personagem');
+  if(s.shinyRule==='all')prot.push('todos os Shinies');
+  else if(s.shinyRule==='first')prot.push('1º Shiny de cada personagem');
+  if(s.minTraitTier<=8)prot.push(s.minTraitTier===1?'qualquer Trait':`Traits ${TIERS[s.minTraitTier-1]}+`);
+  if(s.keepCharacters.length)prot.push(`${s.keepCharacters.length} personagem(ns) VIP`);
+  return `Vende automaticamente: ${tierNames}.`+(prot.length?` Mantém sempre: ${prot.join(', ')}.`:' Sem proteções ativas.');
+}
+
+function traitTierOf(t){return t?.tier??(TIERS.indexOf(t?.rarity)+1);}
+
+function saleMatches(saved,unit,collection){
+  const s=saleSettings(saved);
+  if(!s.enabled)return false;
   const tier=CHARACTERS[unit.id].tier;
-  if(!settings?.enabled||!(settings.tiers?.includes(tier)||settings.characters?.includes(unit.id)))return false;
-  if(!unit.trait)return true;
-  const rule=settings.traitRules?.[tier];
-  const trait=TRAITS.find(t=>t.name===unit.trait);
-  return !!(trait&&rule&&(trait.odds<rule.below||rule.names?.includes(trait.name)));
+  if(s.legacy){
+    if(!s.tiers.includes(tier)&&!s.legacy.characters.includes(unit.id))return false;
+    if(!collection.some(c=>c.id===unit.id&&!!c.shiny===!!unit.shiny))return false;
+    if(!unit.trait)return true;
+    const rule=s.legacy.traitRules[tier];
+    const odds=legacyTraitOdds[unit.trait];
+    return !!(odds&&rule&&(odds<rule.below||rule.names?.includes(unit.trait)));
+  }
+  if(!s.tiers.includes(tier))return false;
+  if(s.keepCharacters.includes(unit.id))return false;
+  if(unit.shiny){
+    if(s.shinyRule==='all')return false;
+    if(s.shinyRule==='first'&&!collection.some(c=>c.id===unit.id&&c.shiny))return false;
+  }else if(s.keepFirstNormal&&!collection.some(c=>c.id===unit.id&&!c.shiny)){
+    return false;
+  }
+  const names=slotTraits(unit);
+  if(names.length&&s.minTraitTier<=8){
+    const highestTraitTier=Math.max(...names.map(n=>traitTierOf(TRAITS.find(t=>t.name===n))));
+    if(highestTraitTier>=s.minTraitTier)return false;
+  }
+  return true;
 }
 
 function settle(state,battle){
@@ -969,9 +1014,8 @@ function settle(state,battle){
       (state.serials??={})[key]=serial;
       const copy={...battle.recruit,uid:`catch-${state.index}`,xp:xpTo(Math.min(levelCap(state),battle.level)),serial};
       recordDex(state,copy);
-      const settings=state.autoSell,tier=CHARACTERS[id].tier;
-      const match=saleMatches(settings,copy);
-      if(match&&state.collection.some(c=>c.id===id&&!!c.shiny===!!shiny)){
+      const tier=CHARACTERS[id].tier;
+      if(saleMatches(state.autoSell,copy,state.collection)){
         entry.sold=copy;entry.saleGold=SALE_PRICES[tier-1];entry.gold+=entry.saleGold;state.gold+=entry.saleGold;
         if(tier>=5){state.items??={};state.items.essence=(state.items.essence??0)+(tier-4);}
       }else{state.collection.push(copy);entry.recruit=copy;}
@@ -1228,7 +1272,7 @@ function ballChallenge(state,action,now){
   const newMilestones=[];
   if(raid){
     items=1;
-    const prevClaimed=state.raid?.day===daily.day&&Array.isArray(state.raid.claimed)?state.raid.claimed.slice():[];
+    const prevClaimed=state.raid?.day===daily.day&&Array.isArray(state.raid.claimed)?raidClaims(state.raid.claimed):[];
     const bestToday=Math.max(used?(state.raid.bestDamage??0):0,damage);
     for(const m of RAID_MILESTONES){
       if(bestToday>=m.damage&&!prevClaimed.includes(m.damage)){
@@ -1261,7 +1305,7 @@ function ballChallenge(state,action,now){
     }
   }
   state.ballSequence=(state.ballSequence??0)+1;
-  state.ballRun={physics:4,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
+  state.ballRun={physics:5,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
   return true;
 }
 export function challenge(state,now){
@@ -1694,28 +1738,39 @@ export function applyGameAction(state,action,now){
       if(action.enabled&&!u.nen&&state.team.includes(u.uid)&&formationCost(state)>=4)return false;
       u.nen=action.enabled;return true;
     }
-    case 'saleTrait': {
-      const {tier,name,below,checked}=action;
-      if(!Number.isInteger(tier)||tier<1||tier>TIERS.length)return false;
-      const named=name!==undefined;
-      if(named&&(!TRAITS.some(t=>t.name===name)||typeof checked!=='boolean'))return false;
-      if(!named&&(!Number.isInteger(below)||below<0||below>1000000))return false;
-      const settings=state.autoSell=saleSettings(state.autoSell);
-      const rules=settings.traitRules??={};
-      const rule=rules[tier]??={below:0,names:[]};
-      if(!named)rule.below=below;
-      else if(checked){if(!rule.names.includes(name))rule.names.push(name);}
-      else rule.names=rule.names.filter(n=>n!==name);
+    case 'autoSell': {
+      const settings=saleSettings(state.autoSell);
+      if(settings.legacy){
+        if(action.resetLegacy!==true)return false;
+        state.autoSell=saleSettings();
+        return true;
+      }
+      state.autoSell=settings;
+      if(typeof action.enabled==='boolean')settings.enabled=action.enabled;
+      if(Array.isArray(action.tiers)){
+        const next=[...new Set(action.tiers.map(Number).filter(i=>Number.isInteger(i)&&i>=1&&i<=TIERS.length))].sort((a,b)=>a-b);
+        settings.tiers=next;
+      }
+      if(Number.isInteger(action.toggleTier)&&action.toggleTier>=1&&action.toggleTier<=TIERS.length){
+        const has=settings.tiers.includes(action.toggleTier);
+        settings.tiers=has?settings.tiers.filter(t=>t!==action.toggleTier):[...settings.tiers,action.toggleTier].sort((a,b)=>a-b);
+      }
+      if(typeof action.keepFirstNormal==='boolean')settings.keepFirstNormal=action.keepFirstNormal;
+      if(['all','first','none'].includes(action.shinyRule))settings.shinyRule=action.shinyRule;
+      if(Number.isInteger(action.minTraitTier)&&action.minTraitTier>=1&&action.minTraitTier<=9)settings.minTraitTier=action.minTraitTier;
+      if(typeof action.keepChar==='string'&&Object.hasOwn(CHARACTERS,action.keepChar)){
+        const add=action.keep!==false;
+        settings.keepCharacters=add?[...new Set([...settings.keepCharacters,action.keepChar])]:settings.keepCharacters.filter(id=>id!==action.keepChar);
+      }
       return true;
     }
     case 'saleSetting': {
       const {group,value,checked}=action;
-      if(typeof checked!=='boolean'||!['enabled','tiers','characters'].includes(group))return false;
+      if(typeof checked!=='boolean'||!['enabled','tiers'].includes(group))return false;
       if(group==='tiers'&&(!Number.isInteger(value)||value<1||value>TIERS.length))return false;
-      if(group==='characters'&&!Object.hasOwn(CHARACTERS,value))return false;
       const settings=state.autoSell=saleSettings(state.autoSell);
       if(group==='enabled')settings.enabled=checked;
-      else settings[group]=checked?[...new Set([...settings[group],value])]:settings[group].filter(v=>v!==value);
+      else settings.tiers=checked?[...new Set([...settings.tiers,value])].sort((a,b)=>a-b):settings.tiers.filter(v=>v!==value);
       return true;
     }
     case 'dismissAway': {

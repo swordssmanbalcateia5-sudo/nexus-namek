@@ -59,6 +59,12 @@ function affinity(a, b) {
 }
 const distance = (a, b) => Math.hypot((a.x ?? a.slot * 20) - (b.x ?? b.slot * 20), (a.y ?? 50) - (b.y ?? 50));
 const MAIN_SKILLS = new Set(['piccolo','yamcha','kuririn','bulma','freeza-boss','ginyu','beam','rush','ward','heal']);
+
+function applyStun(unit,until){
+  if(unit.ccImmune){unit.ccImmune=false;return;}
+  unit.stunUntil=Math.max(unit.stunUntil??0,until);
+}
+
 class Combate {
   constructor(rosters, { mode = 'duelo', limit = DEFAULT_LIMIT } = {}) {
     if (!['duelo', 'equipe'].includes(mode) || !Number.isInteger(limit) || limit < SAMPLE_STEP || limit > DEFAULT_LIMIT || rosters.length !== 2 || rosters.some(team => !team.length || team.length > 4)) {
@@ -88,7 +94,7 @@ class Combate {
     for(const team of this.teams){
       const king=team.find(u=>hasTrait(u,'Haki do Rei'));
       if(king)for(const foe of this.teams[1-king.side]){
-        if(foe.ccImmune){foe.ccImmune=false;}else{foe.stunUntil=1500;}
+        applyStun(foe,1500);
         foe.exposedUntil=1500;
       }
     }
@@ -308,7 +314,7 @@ class Combate {
         const damage=actor.magic*(domain?1.55:actor.hp<=actor.maxHp*.5?2.25:1.65);
         for(const foe of this.teams[target.side].filter(u=>this.present(u))){
           deliver(foe,{magic:true,area:true,damage});
-          if(domain&&!launch)foe.stunUntil=Math.max(foe.stunUntil??0,this.time+1500);
+          if(domain&&!launch)applyStun(foe,this.time+1500);
         }
         return true;
       }
@@ -498,8 +504,6 @@ class Combate {
     return { winner, seconds: Math.min(this.time,this.limit)/1000, reason: timeout?'limite':'eliminação', scores, events: this.log };
   }
 }
-
-
 return {affinity,Combate};
 })();
 const communityRules=(()=>{
@@ -601,6 +605,7 @@ function weeklyCycle(now=Date.now()){
     index:Math.floor(monday/(7*86400000))
   };
 }
+
 const ARENA_LEAGUES=[
   {id:'bronze',name:'Bronze',min:0,color:'#cd9b6a',reward:{trophies:3,tokens:1,essence:1}},
   {id:'prata',name:'Prata',min:100,color:'#c9d4e4',reward:{trophies:6,tokens:2,essence:2}},
@@ -614,6 +619,7 @@ function arenaLeague(points=0){
   for(const l of ARENA_LEAGUES){if(points>=l.min)current=l;}
   return current;
 }
+
 const ARENA_SHOP=[
   {id:'token',name:'Token de reroll',desc:'Rola as traits de um slot.',cost:5,grant:{traitItems:1}},
   {id:'xpTome',name:'Tomo de XP',desc:'+250.000 XP instantâneo para um personagem.',cost:6,grant:{xpTome:1}},
@@ -621,6 +627,7 @@ const ARENA_SHOP=[
   {id:'catalyst',name:'Catalisador de Trait',desc:'Triplica chance de 2–3 traits e garante Rara+.',cost:15,grant:{catalyst:1}},
   {id:'traitLock',name:'Selo de Trava de Trait',desc:'Trava 1 trait atual durante o reroll.',cost:20,grant:{traitLock:1}},
 ];
+
 const GOLD_SHOP=[
   {id:'token',name:'Token de reroll',desc:'Preço sobe a cada compra na semana.',base:150000,step:75000,limit:10,grant:{traitItems:1}},
   {id:'essence',name:'Essência de Despertar',desc:'Desperta personagens sem precisar de cópia.',base:120000,step:40000,limit:10,grant:{essence:1}},
@@ -629,6 +636,7 @@ const GOLD_SHOP=[
   {id:'catalyst',name:'Catalisador de Trait',desc:'3× chance de 2–3 traits e mínimo Rara+.',base:350000,step:150000,limit:3,grant:{catalyst:1}},
   {id:'traitLock',name:'Selo de Trava de Trait',desc:'Mantém 1 trait escolhida ao rolar o slot.',base:500000,step:250000,limit:2,grant:{traitLock:1}},
 ];
+
 function rarityLabel(odds){
   const format=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
   for(const [divisor,suffix] of [[1e9,'B'],[1e6,'M'],[1e3,' mil']]){
@@ -636,7 +644,6 @@ function rarityLabel(odds){
   }
   return '1/'+format.format(odds);
 }
-
 return {DAILY_ZONE,GIFT_GOLD,PROFILE_OPTIONS,DEFAULT_PROFILE,PROFILE_WORLDS,AVATAR_SIZE,PROFILE_BODY_LIMIT,canEquipBackground,appearancePatch,dailyCycle,weeklyCycle,ARENA_LEAGUES,arenaLeague,ARENA_SHOP,GOLD_SHOP,rarityLabel};
 })();
 const duelEngine=(()=>{
@@ -689,7 +696,7 @@ class Combate {
     for(const team of this.teams){
       const king=team.find(u=>hasTrait(u,'Haki do Rei'));
       if(king)for(const foe of this.teams[1-king.side]){
-        if(foe.ccImmune){foe.ccImmune=false;}else{applyNegative(foe,'stunUntil',1500);}
+        applyNegative(foe,'stunUntil',1500);
         applyNegative(foe,'exposedUntil',1500);
       }
     }
@@ -2152,6 +2159,11 @@ function interceptNegative(unit,key){
 function applyNegative(unit,key,value){
   const c=combatOf.get(unit),t=c?.time??0;
   const stunned=key==='stunUntil';
+  if(stunned&&unit.ccImmune){
+    unit.ccImmune=false;
+    unit.controlResistedAt=t;
+    return;
+  }
   if(interceptNegative(unit,key)||(stunned&&unit.freedomUntil>t)){
     if(stunned)unit.controlResistedAt=t;
     return;
@@ -2940,13 +2952,13 @@ function stepDuel(m){
     note(m,'Tempo esgotado · decisão pela média das frações de PV restantes.');
   }
 }
-
 return {collisionBonus,collisionPower,createDuel,finishDuel,stepDuel,pucciMultiplier,bossKits,BOSS_FINISH_FX};
 })();
 const game=(()=>{
 const {Combate,affinity}=engine;
 const {createDuel,finishDuel,bossKits}=duelEngine;
 const {dailyCycle,weeklyCycle,ARENA_SHOP,GOLD_SHOP}=communityRules;
+
 const AREAS = [
   { id:'entrada', name:'Costa de Namek', description:'Patrulhas do império rondam o litoral.', levels:[1,3], unlock:1, enemy:'Soldado da Tropa Freeza', base:[150,18,9,9], color:'Roxo' },
   { id:'meio', name:'Planícies Verdes', description:'O terreno aberto favorece as tropas de elite.', levels:[4,6], unlock:4, enemy:'Veterano da Tropa Freeza', base:[220,23,12,12], color:'Amarelo' },
@@ -3372,6 +3384,7 @@ const approvedArt = {"hoova-shisui":"hoova-shisui","zawa-cheon":"zawa-cheon","ca
   "eternal-sailor-moon": "eternal-sailor-moon",
   "anos-voldigoad": "anos-voldigoad"
 };
+
 function spriteFor(unit){
   const slug=approvedArt[unit.id];
   if(!slug)return CHARACTERS[unit.id].sprite;
@@ -3488,6 +3501,7 @@ const readyForBoss = state=>state.team.length>0 && state.finalWins>=(state.bossG
 const upgradeLevel = (state,id)=>state.upgrades?.[id]??(id==='ritmo'&&state.upgraded?1:0);
 const upgradeValue = (state,id)=>UPGRADES[id].values[upgradeLevel(state,id)];
 const waitFor = state=>upgradeValue(state,'ritmo')*1000;
+
 function buyUpgrade(state,id){
   if(!Object.hasOwn(UPGRADES,id))return false;
   const level=upgradeLevel(state,id);
@@ -3497,6 +3511,7 @@ function buyUpgrade(state,id){
   (state.upgrades??={})[id]=level+1;
   return true;
 }
+
 function fresh(now=Date.now(),seed=Date.now()>>>0){
   const collection = initial.map(id=>({uid:`initial-${id}`,id,xp:0,serial:1,shiny:false,trait:null,odds:null}));
   return {version:1,seed,created:now,collection,team:collection.map(x=>x.uid),positions:Object.fromEntries(collection.map((x,i)=>[x.uid,position[i]])),leader:collection[0].uid,area:0,gold:0,wins:0,losses:0,finalWins:0,streak:0,upgrades:{},completed:false,world:0,unlocked:0,journey:{},autoRoutes:true,paused:false,running:true,nextAt:now,waitDuration:0,pending:null,index:0,clock:now,log:[]};
@@ -3507,6 +3522,7 @@ function leaderBuff(leader,member){
   if(!leader)return [];
   return [member.role,member.color,member.universe,'Equipe'].includes(leader.scope)?leader.leadership:[];
 }
+
 const MAX_STARS=5;
 const TRAIT_PITY_LIMIT=25;
 const PRESET_SLOTS=['exploracao','arena','torre','raid'];
@@ -3540,6 +3556,17 @@ const WEEKLY_TOWER_RULES=[
   {id:'cool',name:'Cores Frias',desc:'Apenas Verde, Turquesa, Azul, Roxo, Branco ou Preto.',allow:c=>['Verde','Turquesa','Azul','Roxo','Branco','Preto'].includes(c.color)},
   {id:'tactical',name:'Guardiões & Suportes',desc:'Apenas Guardiões e Suportes entram em campo.',allow:c=>['Guardião','Suporte'].includes(c.role)},
 ];
+
+// Build 57 stored claims by the old damage thresholds, in the same reward order.
+function normalizeClaims(claimed,milestones,oldThresholds){
+  return [...new Set(claimed.map(damage=>{
+    const index=oldThresholds.indexOf(damage);
+    return index<0?damage:milestones[index].damage;
+  }))];
+}
+const raidClaims=claimed=>normalizeClaims(claimed,RAID_MILESTONES,[50000,250000,750000,2000000,5000000]);
+const worldBossClaims=claimed=>normalizeClaims(claimed,WORLD_BOSS_MILESTONES,[500000,2000000,10000000,50000000,200000000]);
+
 function grantItems(state,bundle){
   if(!bundle)return;
   if(bundle.gold)state.gold=(state.gold??0)+bundle.gold;
@@ -3552,6 +3579,7 @@ function grantItems(state,bundle){
     }
   }
 }
+
 function awakenCost(unit){
   const card=CHARACTERS[unit?.id];
   const stars=Math.max(0,Math.min(MAX_STARS,unit?.stars??0));
@@ -3563,6 +3591,7 @@ function awakenCost(unit){
     essence:next*Math.max(1,card.tier-3)
   };
 }
+
 function dexMastery(state){
   if(!state)return {charTiers:0,shinyTiers:0,allBonus:0,offenseBonus:0,goldBonus:0,completedUniverses:[],universes:[]};
   const {characters,totals}=dexSummary(state);
@@ -3586,6 +3615,7 @@ function dexMastery(state){
     universes
   };
 }
+
 function slotTraits(unit,index=unit.activeSlot??0){
   const stored=unit.traitSlots?.[index]??(index===0&&unit.trait?[unit.trait]:[]);
   return Array.isArray(stored)?[...new Set(stored.map(n=>TRAIT_MIGRATION[n]??n))].filter(name=>TRAITS.some(t=>t.name===name)).slice(0,3):[];
@@ -3774,6 +3804,7 @@ function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES
   const traitP=trait?traitMult(trait)/trait.odds:Math.max(.05,1-totalTraitP);
   return {id:card.id,shiny,trait:trait?.name??null,odds:Math.round(1/(chance*weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
 }
+
 const SALE_PRICES=[8,20,50,125,350,1000,3500,12000];
 const RECOVERY_MS=20000;
 function readyAt(state,uid){
@@ -3796,6 +3827,7 @@ const enemyBonuses = [
   {hp:3.30, damage:1.70, bossHp:5.10, bossDamage:2.35}, // M9 Hunter × Hunter
   {hp:4.00, damage:2.00, bossHp:6.20, bossDamage:2.75}, // M10 One Punch Man
 ];
+
 function makeBattle(state,start,boss=false,towerFloor=0){
   const random=rng(state.seed,state.index++);
   const encounterWorld=towerFloor?(towerFloor-1)%WORLDS.length:state.world??0;
@@ -3846,30 +3878,66 @@ function shareExperience(state,battle,xp){
   }
   return granted;
 }
+
+const legacyTraitOdds={"Concentração Total": 4, "Reforço Amaldiçoado": 5, "Haki do Armamento": 10, "Ten": 10, "Kaidō": 20, "Shunpo": 20, "Modo Sábio": 25, "Respiração do Trovão": 25, "Haki do Rei": 50, "Instinto Superior": 100, "Restrição Celestial": 125, "Haki da Observação": 125, "Zenkai": 200, "Full Counter": 250, "The World": 500, "Voto de Nen": 1000, "Made in Heaven": 2000};
+
 function saleSettings(saved){
-  // Older backups can contain only the filters that were configured.
+  // Novo sistema simplificado de Auto-Sell, com retrocompatibilidade para saves antigos.
   const list=value=>Array.isArray(value)?value:[];
-  const tiers=list(saved?.tiers).map(Number).filter(i=>Number.isInteger(i)&&i>=1&&i<=TIERS.length);
-  const characters=list(saved?.characters).filter(id=>Object.hasOwn(CHARACTERS,id));
-  const traitRules={};
-  for(const [tier,rule] of Object.entries(saved?.traitRules??{})){
-    if(!TIERS[Number(tier)-1]||!rule)continue;
-    const below=Number(rule.below);
-    traitRules[tier]={
-      below:Number.isInteger(below)&&below>=0&&below<=1000000?below:0,
-      names:list(rule.names).filter(name=>TRAITS.some(t=>t.name===name))
-    };
-  }
-  return {enabled:saved?.enabled===true,tiers:[...new Set(tiers)],characters:[...new Set(characters)],traitRules};
+  const tiers=[...new Set(list(saved?.tiers).map(Number).filter(i=>Number.isInteger(i)&&i>=1&&i<=TIERS.length))].sort((a,b)=>a-b);
+  const keepCharacters=[...new Set(list(saved?.keepCharacters).filter(id=>Object.hasOwn(CHARACTERS,id)))];
+  const shinyRule=['all','first','none'].includes(saved?.shinyRule)?saved.shinyRule:'all';
+  const keepFirstNormal=saved?.keepFirstNormal!==false;
+  const rawMin=Number(saved?.minTraitTier);
+  const minTraitTier=Number.isInteger(rawMin)&&rawMin>=1&&rawMin<=9?rawMin:1;
+  const old=saved?.legacy??(saved?.characters||saved?.traitRules?saved:null);
+  const settings={enabled:saved?.enabled===true,tiers,keepFirstNormal,shinyRule,minTraitTier,keepCharacters};
+  if(old)settings.legacy={characters:list(old.characters),traitRules:old.traitRules??{}};
+  return settings;
 }
 
-function saleMatches(settings,unit){
+function describeAutoSell(saved){
+  const s=saleSettings(saved);
+  if(!s.enabled)return 'Venda automática desligada. Todos os novos recrutas entram na coleção.';
+  if(!s.tiers.length)return 'Ligada, mas nenhuma raridade selecionada para venda.';
+  const tierNames=s.tiers.map(i=>TIERS[i-1]).join(', ');
+  const prot=[];
+  if(s.keepFirstNormal)prot.push('1ª cópia normal de cada personagem');
+  if(s.shinyRule==='all')prot.push('todos os Shinies');
+  else if(s.shinyRule==='first')prot.push('1º Shiny de cada personagem');
+  if(s.minTraitTier<=8)prot.push(s.minTraitTier===1?'qualquer Trait':`Traits ${TIERS[s.minTraitTier-1]}+`);
+  if(s.keepCharacters.length)prot.push(`${s.keepCharacters.length} personagem(ns) VIP`);
+  return `Vende automaticamente: ${tierNames}.`+(prot.length?` Mantém sempre: ${prot.join(', ')}.`:' Sem proteções ativas.');
+}
+
+function traitTierOf(t){return t?.tier??(TIERS.indexOf(t?.rarity)+1);}
+
+function saleMatches(saved,unit,collection){
+  const s=saleSettings(saved);
+  if(!s.enabled)return false;
   const tier=CHARACTERS[unit.id].tier;
-  if(!settings?.enabled||!(settings.tiers?.includes(tier)||settings.characters?.includes(unit.id)))return false;
-  if(!unit.trait)return true;
-  const rule=settings.traitRules?.[tier];
-  const trait=TRAITS.find(t=>t.name===unit.trait);
-  return !!(trait&&rule&&(trait.odds<rule.below||rule.names?.includes(trait.name)));
+  if(s.legacy){
+    if(!s.tiers.includes(tier)&&!s.legacy.characters.includes(unit.id))return false;
+    if(!collection.some(c=>c.id===unit.id&&!!c.shiny===!!unit.shiny))return false;
+    if(!unit.trait)return true;
+    const rule=s.legacy.traitRules[tier];
+    const odds=legacyTraitOdds[unit.trait];
+    return !!(odds&&rule&&(odds<rule.below||rule.names?.includes(unit.trait)));
+  }
+  if(!s.tiers.includes(tier))return false;
+  if(s.keepCharacters.includes(unit.id))return false;
+  if(unit.shiny){
+    if(s.shinyRule==='all')return false;
+    if(s.shinyRule==='first'&&!collection.some(c=>c.id===unit.id&&c.shiny))return false;
+  }else if(s.keepFirstNormal&&!collection.some(c=>c.id===unit.id&&!c.shiny)){
+    return false;
+  }
+  const names=slotTraits(unit);
+  if(names.length&&s.minTraitTier<=8){
+    const highestTraitTier=Math.max(...names.map(n=>traitTierOf(TRAITS.find(t=>t.name===n))));
+    if(highestTraitTier>=s.minTraitTier)return false;
+  }
+  return true;
 }
 
 function settle(state,battle){
@@ -3903,9 +3971,8 @@ function settle(state,battle){
       (state.serials??={})[key]=serial;
       const copy={...battle.recruit,uid:`catch-${state.index}`,xp:xpTo(Math.min(levelCap(state),battle.level)),serial};
       recordDex(state,copy);
-      const settings=state.autoSell,tier=CHARACTERS[id].tier;
-      const match=saleMatches(settings,copy);
-      if(match&&state.collection.some(c=>c.id===id&&!!c.shiny===!!shiny)){
+      const tier=CHARACTERS[id].tier;
+      if(saleMatches(state.autoSell,copy,state.collection)){
         entry.sold=copy;entry.saleGold=SALE_PRICES[tier-1];entry.gold+=entry.saleGold;state.gold+=entry.saleGold;
         if(tier>=5){state.items??={};state.items.essence=(state.items.essence??0)+(tier-4);}
       }else{state.collection.push(copy);entry.recruit=copy;}
@@ -3925,6 +3992,7 @@ function settle(state,battle){
   state.log=[entry,...state.log].slice(0,25);
   return entry;
 }
+
 function advance(state,now,budget=null,encounterLimit=Infinity){
   if(typeof budget==='number'){encounterLimit=budget;budget=null;}
   if(state.autoSell)state.autoSell=saleSettings(state.autoSell);
@@ -3990,6 +4058,7 @@ function advance(state,now,budget=null,encounterLimit=Infinity){
   state.clock=now;
   return entries;
 }
+
 const AWAY_THRESHOLD=10*60*1000;
 const AFK_ENCOUNTER_LIMIT=2400;
 function newWindow(state,start){
@@ -4059,12 +4128,14 @@ function advanceWithPresence(state,now,observedAt=null,budget=null){
   run(now);
   return all;
 }
+
 function startExploration(state,now){
   if(state.pending?.boss||state.running)return false;
   state.running=true;
   if(!state.pending)state.nextAt=Math.max(now,state.nextAt);
   return true;
 }
+
 const TOWER_LIMIT=30;
 const towerPrize=floor=>floor%10===0?3:floor%5===0?2:1;
 function towerAffix(floor){
@@ -4158,7 +4229,7 @@ function ballChallenge(state,action,now){
   const newMilestones=[];
   if(raid){
     items=1;
-    const prevClaimed=state.raid?.day===daily.day&&Array.isArray(state.raid.claimed)?state.raid.claimed.slice():[];
+    const prevClaimed=state.raid?.day===daily.day&&Array.isArray(state.raid.claimed)?raidClaims(state.raid.claimed):[];
     const bestToday=Math.max(used?(state.raid.bestDamage??0):0,damage);
     for(const m of RAID_MILESTONES){
       if(bestToday>=m.damage&&!prevClaimed.includes(m.damage)){
@@ -4191,7 +4262,7 @@ function ballChallenge(state,action,now){
     }
   }
   state.ballSequence=(state.ballSequence??0)+1;
-  state.ballRun={physics:4,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
+  state.ballRun={physics:5,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
   return true;
 }
 function challenge(state,now){
@@ -4200,9 +4271,11 @@ function challenge(state,now){
   state.pending=makeBattle(state,now,true);
   return true;
 }
+
 function formationSlots(state){
   return state.slots??Array.from({length:4},(_,i)=>state.team[i]??null);
 }
+
 function formationCost(state,slots=state.team){
   return slots.reduce((n,uid)=>n+(uid?(state.collection.find(u=>u.uid===uid)?.nen?2:1):0),0);
 }
@@ -4278,6 +4351,7 @@ function applyFormationPreset(state, preset='padrao'){
   ordered.forEach((uid,i)=>{state.positions[uid]=coords[i].slice();});
   return true;
 }
+
 function autoFormation(state, mode='power', now=Date.now()){
   if(!['power','projected','balanced','area'].includes(mode)||!state.collection.length)return false;
   const enemyColor=worldOf(state).areas[state.area]?.color;
@@ -4401,6 +4475,7 @@ function dexSummary(state){
     }
   };
 }
+
 function canSellUnit(state, uid){
   if(!uid||state.collection.length<=1||state.team.includes(uid))return false;
   const unit=state.collection.find(u=>u.uid===uid);
@@ -4437,6 +4512,7 @@ function duplicateSellCandidates(state,{includeCommonTraits=false}={}){
   }
   return candidates;
 }
+
 function sellUnit(state, uid){
   if(!canSellUnit(state,uid))return false;
   hydrateAwayRecruits(state);
@@ -4458,6 +4534,7 @@ function sellUnit(state, uid){
   }
   return gold;
 }
+
 function goldShopPrice(item,bought=0){
   return item.base+item.step*bought;
 }
@@ -4542,6 +4619,7 @@ function applySuggestedFormation(state,action,now){
   if(wasEmpty&&!state.pending)state.nextAt=now;
   return true;
 }
+
 function applyGameAction(state,action,now){
   switch(action?.type){
     case 'lock': return toggleLock(state,action.uid,action.locked);
@@ -4617,28 +4695,39 @@ function applyGameAction(state,action,now){
       if(action.enabled&&!u.nen&&state.team.includes(u.uid)&&formationCost(state)>=4)return false;
       u.nen=action.enabled;return true;
     }
-    case 'saleTrait': {
-      const {tier,name,below,checked}=action;
-      if(!Number.isInteger(tier)||tier<1||tier>TIERS.length)return false;
-      const named=name!==undefined;
-      if(named&&(!TRAITS.some(t=>t.name===name)||typeof checked!=='boolean'))return false;
-      if(!named&&(!Number.isInteger(below)||below<0||below>1000000))return false;
-      const settings=state.autoSell=saleSettings(state.autoSell);
-      const rules=settings.traitRules??={};
-      const rule=rules[tier]??={below:0,names:[]};
-      if(!named)rule.below=below;
-      else if(checked){if(!rule.names.includes(name))rule.names.push(name);}
-      else rule.names=rule.names.filter(n=>n!==name);
+    case 'autoSell': {
+      const settings=saleSettings(state.autoSell);
+      if(settings.legacy){
+        if(action.resetLegacy!==true)return false;
+        state.autoSell=saleSettings();
+        return true;
+      }
+      state.autoSell=settings;
+      if(typeof action.enabled==='boolean')settings.enabled=action.enabled;
+      if(Array.isArray(action.tiers)){
+        const next=[...new Set(action.tiers.map(Number).filter(i=>Number.isInteger(i)&&i>=1&&i<=TIERS.length))].sort((a,b)=>a-b);
+        settings.tiers=next;
+      }
+      if(Number.isInteger(action.toggleTier)&&action.toggleTier>=1&&action.toggleTier<=TIERS.length){
+        const has=settings.tiers.includes(action.toggleTier);
+        settings.tiers=has?settings.tiers.filter(t=>t!==action.toggleTier):[...settings.tiers,action.toggleTier].sort((a,b)=>a-b);
+      }
+      if(typeof action.keepFirstNormal==='boolean')settings.keepFirstNormal=action.keepFirstNormal;
+      if(['all','first','none'].includes(action.shinyRule))settings.shinyRule=action.shinyRule;
+      if(Number.isInteger(action.minTraitTier)&&action.minTraitTier>=1&&action.minTraitTier<=9)settings.minTraitTier=action.minTraitTier;
+      if(typeof action.keepChar==='string'&&Object.hasOwn(CHARACTERS,action.keepChar)){
+        const add=action.keep!==false;
+        settings.keepCharacters=add?[...new Set([...settings.keepCharacters,action.keepChar])]:settings.keepCharacters.filter(id=>id!==action.keepChar);
+      }
       return true;
     }
     case 'saleSetting': {
       const {group,value,checked}=action;
-      if(typeof checked!=='boolean'||!['enabled','tiers','characters'].includes(group))return false;
+      if(typeof checked!=='boolean'||!['enabled','tiers'].includes(group))return false;
       if(group==='tiers'&&(!Number.isInteger(value)||value<1||value>TIERS.length))return false;
-      if(group==='characters'&&!Object.hasOwn(CHARACTERS,value))return false;
       const settings=state.autoSell=saleSettings(state.autoSell);
       if(group==='enabled')settings.enabled=checked;
-      else settings[group]=checked?[...new Set([...settings[group],value])]:settings[group].filter(v=>v!==value);
+      else settings.tiers=checked?[...new Set([...settings.tiers,value])].sort((a,b)=>a-b):settings.tiers.filter(v=>v!==value);
       return true;
     }
     case 'dismissAway': {
@@ -4689,18 +4778,17 @@ function applyGameAction(state,action,now){
     default: return false;
   }
 }
-
-return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAIT_MIGRATION,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,MAX_STARS,TRAIT_PITY_LIMIT,PRESET_SLOTS,PRESET_LABELS,RAID_MILESTONES,WORLD_BOSS_MILESTONES,TOWER_AFFIXES,WEEKLY_TOWER_FLOORS,WEEKLY_TOWER_RULES,grantItems,awakenCost,dexMastery,slotTraits,loadoutChance,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,advance,AWAY_THRESHOLD,AFK_ENCOUNTER_LIMIT,advanceWithPresence,startExploration,TOWER_LIMIT,towerPrize,towerAffix,raidToday,weeklyTowerToday,towerEnemies,weeklyTowerEnemies,challenge,formationSlots,formationCost,equip,unitPower,formationPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,dexSummary,canSellUnit,duplicateSellCandidates,sellUnit,goldShopPrice,resolveDefenseSquad,applyGameAction};
+return {AREAS,BOSS,WORLDS,worldOf,levelCap,COLORS,TIERS,spriteFor,CHARACTERS,SKILL_EFFECTS,TRAIT_MIGRATION,TRAITS,UPGRADES,xpFor,levelAt,xpProgress,maxLevel,readyForBoss,upgradeLevel,waitFor,buyUpgrade,fresh,MAX_STARS,TRAIT_PITY_LIMIT,PRESET_SLOTS,PRESET_LABELS,RAID_MILESTONES,WORLD_BOSS_MILESTONES,TOWER_AFFIXES,WEEKLY_TOWER_FLOORS,WEEKLY_TOWER_RULES,raidClaims,worldBossClaims,grantItems,awakenCost,dexMastery,slotTraits,loadoutChance,fighter,recruitRates,rollRecruit,SALE_PRICES,RECOVERY_MS,readyAt,makeBattle,saleSettings,describeAutoSell,advance,AWAY_THRESHOLD,AFK_ENCOUNTER_LIMIT,advanceWithPresence,startExploration,TOWER_LIMIT,towerPrize,towerAffix,raidToday,weeklyTowerToday,towerEnemies,weeklyTowerEnemies,challenge,formationSlots,formationCost,equip,unitPower,formationPower,projectedPower,leaderApplies,applyFormationPreset,autoFormation,dexSummary,canSellUnit,duplicateSellCandidates,sellUnit,goldShopPrice,resolveDefenseSquad,applyGameAction};
 })();
 const {serialSchema,issueSerials} =serials;
-const {advance,advanceWithPresence,applyGameAction,fighter,fresh,CHARACTERS,dexMastery,resolveDefenseSquad,WORLD_BOSS_MILESTONES} =game;
+const {advance,advanceWithPresence,applyGameAction,fighter,fresh,CHARACTERS,dexMastery,resolveDefenseSquad,WORLD_BOSS_MILESTONES,worldBossClaims} =game;
 const {dailyCycle,weeklyCycle,arenaLeague,DEFAULT_PROFILE,appearancePatch,PROFILE_BODY_LIMIT,GIFT_GOLD} =communityRules;
 
 class ApiError extends Error {
   constructor(status,message,code){super(message);this.status=status;this.code=code;}
 }
 function reject(status,message,code){throw new ApiError(status,message,code);}
-const BUILD='nexus-namek-57';
+const BUILD='nexus-namek-58';
 const RANKINGS_TTL=15000;
 const rankingsCache=new WeakMap();
 const invalidateRankings=db=>rankingsCache.delete(db);
@@ -5058,7 +5146,7 @@ async function rankedMatch(db,id,{day,attempt}){
     reject(409,'Sem adversários disponíveis. Cada jogador pode ser sorteado uma vez por ciclo.');
   }
   const other=rival._team;
-  const run={physics:4,ranked:true,rivalName:rival.name,left:own.fighters,right:other.fighters,limit:120};
+  const run={physics:5,ranked:true,rivalName:rival.name,left:own.fighters,right:other.fighters,limit:120};
   const match=duelEngine.finishDuel(duelEngine.createDuel(run.left,run.right,run.limit));
   run.result=match.result;
   run.launchSeed=match.launchSeed;
@@ -5117,7 +5205,7 @@ async function claimArenaSeason(db,id){
   if(!credited.meta.changes)reject(409,'Recompensa da temporada anterior já resgatada.');
   return {season:prevWeek,league,reward:league.reward};
 }
-async function worldBossStatus(db,id){
+async function worldBossStatus(db,id,{rawClaims=false}={}){
   const {week,nextAt}=weeklyCycle();
   const [boss,mine,top]=await db.batch([
     db.prepare('SELECT total_damage FROM nexus_world_boss WHERE week=?').bind(week),
@@ -5128,16 +5216,17 @@ async function worldBossStatus(db,id){
   const totalDamage=boss.results[0]?.total_damage??0;
   const myDamage=mine.results[0]?.damage??0;
   const claimed=JSON.parse(mine.results[0]?.claimed??'[]');
-  return {week,nextAt,totalDamage,myDamage,claimed,milestones:WORLD_BOSS_MILESTONES,top:top.results};
+  return {week,nextAt,totalDamage,myDamage,claimed:rawClaims?claimed:worldBossClaims(claimed),milestones:WORLD_BOSS_MILESTONES,top:top.results};
 }
 async function claimWorldBoss(db,id){
-  const status=await worldBossStatus(db,id);
+  const status=await worldBossStatus(db,id,{rawClaims:true});
   const {week}=status;
   if(status.myDamage<=0)reject(400,'Participe de pelo menos uma Raid nesta semana para resgatar.');
-  const newly=WORLD_BOSS_MILESTONES.filter(m=>status.totalDamage>=m.damage&&!status.claimed.includes(m.damage));
+  const claimed=worldBossClaims(status.claimed);
+  const newly=WORLD_BOSS_MILESTONES.filter(m=>status.totalDamage>=m.damage&&!claimed.includes(m.damage));
   if(!newly.length)reject(409,'Nenhum novo marco global disponível para resgate.');
   const previous=JSON.stringify(status.claimed);
-  const next=JSON.stringify([...status.claimed,...newly.map(m=>m.damage)]);
+  const next=JSON.stringify([...claimed,...newly.map(m=>m.damage)]);
   const [credited]=await db.batch([
     creditReward(db,id,newly,'EXISTS(SELECT 1 FROM nexus_world_boss_contrib WHERE week=? AND player=? AND claimed=?)',[week,id,previous]),
     db.prepare('UPDATE nexus_world_boss_contrib SET claimed=? WHERE week=? AND player=? AND claimed=? AND changes()=1').bind(next,week,id,previous)

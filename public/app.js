@@ -1,8 +1,9 @@
 import {unitLabel} from './unit-label.js';
 import {affinity} from "./engine.js";
 import {ARENA_SHOP,GOLD_SHOP,weeklyCycle,arenaLeague} from './community-rules.js';
-import {MAX_STARS,TRAIT_PITY_LIMIT,PRESET_SLOTS,PRESET_LABELS,RAID_MILESTONES,WEEKLY_TOWER_FLOORS,awakenCost,dexMastery,towerAffix,weeklyTowerToday,weeklyTowerEnemies,goldShopPrice,autoFormation,dexSummary,duplicateSellCandidates,loadoutChance,slotTraits,raidToday,towerEnemies,saleSettings,canSellUnit,formationCost,leaderApplies,RECOVERY_MS,SALE_PRICES,readyAt,formationSlots,spriteFor,recruitRates,formationPower,projectedPower,unitPower,WORLDS,worldOf,levelCap,CHARACTERS,COLORS,SKILL_EFFECTS,TIERS,TRAITS,UPGRADES,AWAY_THRESHOLD,AFK_ENCOUNTER_LIMIT,advanceWithPresence,advance,applyGameAction,fighter,fresh,levelAt,maxLevel,readyForBoss,upgradeLevel,waitFor,xpProgress} from './game.js';
+import {MAX_STARS,TRAIT_PITY_LIMIT,PRESET_SLOTS,PRESET_LABELS,RAID_MILESTONES,raidClaims,WEEKLY_TOWER_FLOORS,awakenCost,dexMastery,towerAffix,weeklyTowerToday,weeklyTowerEnemies,goldShopPrice,autoFormation,dexSummary,duplicateSellCandidates,loadoutChance,slotTraits,raidToday,towerEnemies,saleSettings,describeAutoSell,canSellUnit,formationCost,leaderApplies,RECOVERY_MS,SALE_PRICES,readyAt,formationSlots,spriteFor,recruitRates,formationPower,projectedPower,unitPower,WORLDS,worldOf,levelCap,CHARACTERS,COLORS,SKILL_EFFECTS,TIERS,TRAITS,UPGRADES,AWAY_THRESHOLD,AFK_ENCOUNTER_LIMIT,advanceWithPresence,advance,applyGameAction,fighter,fresh,levelAt,maxLevel,readyForBoss,upgradeLevel,waitFor,xpProgress} from './game.js';
 import * as previousDuel from './duel-v2.js';
+import * as build57Duel from './duel-v4.js';
 import * as frozenDuel from './duel-v3.js';
 import {paintTranscendentes} from './arena-fx.js';
 import * as legacyDuel from './duel-v1.js';
@@ -216,7 +217,7 @@ function switchFight(key){
   ({duel=null,rival=null,viewingRun=null}=savedFights.get(key)??{});
   fightContext=key;frameTime=0;carry=0;
 }
-const arenaReplay={4:{createDuel,stepDuel,finishDuel},3:frozenDuel,2:previousDuel};
+const arenaReplay={5:{createDuel,stepDuel,finishDuel},4:build57Duel,3:frozenDuel,2:previousDuel};
 function replayRules(run){return arenaReplay[run.physics]??legacyDuel}
 function watchRun(run){
   if(!run.ranked)mode=run.raid?'raid':run.weekly?'weeklyTower':'tower';
@@ -760,14 +761,10 @@ function renderProfile(){
   $('#profile-content').innerHTML=content;
 }
 
-let saleTier=1;
 // Keep the same form controls mounted while battles and settings requests finish.
 const pendingSettings=new Map();
 function settingKey(input){
-  if(input.id==='sale-trait-limit'||input.hasAttribute('data-sale-trait')){
-    return saleTier+':'+(input.dataset.saleTrait??'limit');
-  }
-  return input.dataset.sale?input.dataset.sale+':'+input.value:input.id;
+  return input.id||input.dataset.autosellTier||'setting';
 }
 function changeSetting(input,action){
   const key=settingKey(input);
@@ -781,54 +778,109 @@ function changeSetting(input,action){
 function renderSettings(panel){
   const mode=community?.active()?'online':'solo';
   if(panel.querySelector('.settings')?.dataset.mode!==mode){
+    const sortedChars=Object.values(CHARACTERS).sort((x,y)=>y.tier-x.tier||x.name.localeCompare(y.name,'pt-BR'));
     panel.innerHTML=`<article class="card settings"><h2>Configurações</h2>
       <h3>Conta</h3><button class="ghost" data-tab="comunidade">Google, Discord e código de acesso</button><h3>Progresso da campanha</h3>${community?.active()?'<p class="caption">Sua conta salva no servidor. Vincule sua conta na Comunidade para recuperar o acesso.</p>':`<p class="caption"><span id="save-status"></span> ${location.protocol==='file:'?'Para atualizar o HTML, mantenha o mesmo nome, pasta e navegador. ':''}Use um backup para continuar em outro arquivo ou dispositivo.</p>
       <button type="button" id="export-save">Exportar backup</button> <button type="button" id="import-save">Importar backup</button>`}
       <label><input type="checkbox" id="auto-play"> Exploração automática</label><p class="caption">Parar conclui a luta em andamento e suspende os próximos encontros, inclusive AFK.</p>
       <label><input type="checkbox" id="auto-routes"> Avançar áreas e mundos automaticamente</label><p class="caption">A equipe desafia o chefe quando ele libera e viaja após vencer. Escolher uma área ou mundo manualmente fixa a rota.</p>
-      <h3>Venda automática de cópias</h3><label><input type="checkbox" data-sale="enabled"> Vender novas cópias selecionadas</label>
-      <p class="caption">Escolha raridades ou personagens. A primeira normal e a primeira shiny de cada personagem ficam na coleção. Depois, cópias sem trait são vendidas. Para vender cópias com trait, escolha as exceções abaixo.</p>
-      <p class="caption" id="sale-status" role="status"></p>
-      <fieldset class="sale-options"><legend>Raridade e preço por cópia</legend>${TIERS.map((name,i)=>`<label><input type="checkbox" data-sale="tiers" value="${i+1}"> ${name} · ${int.format(SALE_PRICES[i])} ouro</label>`).join('')}</fieldset>
-      <details id="sale-characters"><summary>Selecionar personagens (<span id="sale-count"></span>)</summary><div class="sale-options">${Object.values(CHARACTERS).sort((x,y)=>x.name.localeCompare(y.name,'pt-BR')).map(c=>`<label><input type="checkbox" data-sale="characters" value="${c.id}"> ${c.name}</label>`).join('')}</div></details>
-      <details id="sale-traits"><summary>Exceções para cópias com trait</summary><p class="caption">Por padrão, toda cópia com trait fica na coleção. As exceções abaixo só valem para personagens marcados individualmente ou pela raridade, inclusive quando a trait aparece pela primeira vez nessa versão.</p>
-      <label>Raridade do personagem <select id="sale-trait-tier">${TIERS.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('')}</select></label>
-      <label>Vender traits mais frequentes que <select id="sale-trait-limit"></select></label>
-      <p class="caption">Com o limite 1/30, uma cópia 1/25 pode ser vendida. Uma 1/30 ou mais rara fica protegida, salvo se você marcar a trait pelo nome.</p>
-      <fieldset class="sale-options"><legend>Também permitir estas traits em personagens de raridade <span id="sale-tier-label"></span></legend>${TRAITS.map(t=>`<label><input type="checkbox" data-sale-trait="${t.name}"> ${t.name} · 1/${int.format(t.odds)}</label>`).join('')}</fieldset></details>
+      <h3>Venda automática (Auto-Sell)</h3>
+      <div id="autosell-legacy" hidden>
+        <label><input type="checkbox" id="autosell-legacy-enabled"> Ativar as regras de venda automática anteriores</label>
+        <button type="button" class="ghost" id="autosell-convert">Configurar o novo sistema</button>
+      </div>
+      <div class="autosell-card" id="autosell-rules">
+        <label class="autosell-master"><input type="checkbox" id="autosell-enabled"> <strong>Ativar venda automática de novos recrutas</strong></label>
+        <div class="autosell-summary" id="sale-status" role="status"></div>
+        <div class="autosell-section">
+          <span class="autosell-label">Atalhos rápidos</span>
+          <div class="autosell-presets">
+            <button type="button" class="ghost" data-autosell-preset="1">Só Comuns</button>
+            <button type="button" class="ghost" data-autosell-preset="1,2">Até Incomuns</button>
+            <button type="button" class="ghost" data-autosell-preset="1,2,3">Até Raras</button>
+            <button type="button" class="ghost" data-autosell-preset="1,2,3,4">Até Épicas</button>
+            <button type="button" class="ghost" data-autosell-preset="">Limpar</button>
+          </div>
+        </div>
+        <div class="autosell-section">
+          <span class="autosell-label">1. Quais raridades vender automaticamente?</span>
+          <div class="tier-pills">${TIERS.map((name,i)=>`<button type="button" class="tier-pill" data-autosell-tier="${i+1}" aria-pressed="false"><strong>${name}</strong><small>${int.format(SALE_PRICES[i])} ouro${i>=4?` + ${i-3} Ess.`:''}</small></button>`).join('')}</div>
+        </div>
+        <div class="autosell-section">
+          <span class="autosell-label">2. Proteções (nunca vender)</span>
+          <label><input type="checkbox" id="autosell-first-normal"> Sempre manter a 1ª cópia normal de cada personagem</label>
+          <div class="autosell-grid">
+            <label>Proteção de Shinies
+              <select id="autosell-shiny">
+                <option value="all">Sempre manter todos os Shinies</option>
+                <option value="first">Manter apenas o 1º Shiny de cada personagem</option>
+                <option value="none">Não proteger Shinies (vender como normal)</option>
+              </select>
+            </label>
+            <label>Proteção por Trait
+              <select id="autosell-trait-tier">
+                <option value="1">Manter qualquer Trait (Comum+)</option>
+                <option value="2">Manter Traits Incomum ou superior</option>
+                <option value="3">Manter Traits Rara ou superior</option>
+                <option value="4">Manter Traits Épica ou superior</option>
+                <option value="5">Manter Traits Mítica ou superior</option>
+                <option value="6">Manter Traits Divina ou superior</option>
+                <option value="7">Manter Traits Secreta ou superior</option>
+                <option value="8">Manter apenas Traits Transcendente</option>
+                <option value="9">Não proteger por Trait (vender mesmo com Trait)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="autosell-section">
+          <span class="autosell-label">3. Lista VIP — Nunca vender estes personagens (ideal para Despertar ★1–★5)</span>
+          <div class="vip-picker">
+            <select id="autosell-vip-select" aria-label="Escolher personagem VIP"><option value="">Escolher personagem para proteger…</option>${sortedChars.map(c=>`<option value="${c.id}">${c.name} (${TIERS[c.tier-1]})</option>`).join('')}</select>
+            <button type="button" class="ghost" id="autosell-vip-add">Adicionar VIP</button>
+          </div>
+          <div class="vip-tags" id="autosell-vip-tags"></div>
+        </div>
+      </div>
       <h3>Exibição neste dispositivo</h3><label><input type="checkbox" data-pref="motion"> Animações de combate</label>
       <label><input type="checkbox" data-pref="numbers"> Números de dano na arena</label></article>`;
     panel.querySelector('.settings').dataset.mode=mode;
   }
   const sale=saleSettings(state.autoSell);
-  const rule=sale.traitRules[saleTier]??{below:0,names:[]};
+  $('#autosell-legacy').hidden=!sale.legacy;
+  $('#autosell-rules').hidden=!!sale.legacy;
   const localStatus=$('#save-status');
   if(localStatus)localStatus.textContent=storageIssue||storageFailed?'Salvamento local indisponível.':'Salvamento automático neste navegador.';
   function setChecked(input,value){
-    input.checked=pendingSettings.get(settingKey(input))?.value??value;
+    if(input)input.checked=pendingSettings.get(settingKey(input))?.value??value;
   }
   setChecked($('#auto-play'),!isPaused());
   setChecked($('#auto-routes'),!!state.autoRoutes);
-  for(const input of panel.querySelectorAll('[data-sale]')){
-    const group=input.dataset.sale;
-    const value=group==='tiers'?Number(input.value):input.value;
-    setChecked(input,group==='enabled'?sale.enabled:sale[group].includes(value));
+  setChecked($('#autosell-enabled'),sale.enabled);
+  setChecked($('#autosell-legacy-enabled'),sale.enabled);
+  setChecked($('#autosell-first-normal'),sale.keepFirstNormal);
+  const shinySel=$('#autosell-shiny');
+  if(shinySel)shinySel.value=pendingSettings.get(settingKey(shinySel))?.value??sale.shinyRule;
+  const traitSel=$('#autosell-trait-tier');
+  if(traitSel)traitSel.value=String(pendingSettings.get(settingKey(traitSel))?.value??sale.minTraitTier);
+  for(const btn of panel.querySelectorAll('[data-autosell-tier]')){
+    const active=sale.tiers.includes(Number(btn.dataset.autosellTier));
+    btn.setAttribute('aria-pressed',String(active));
+    btn.classList.toggle('active',active);
   }
-  $('#sale-count').textContent=String(panel.querySelectorAll('[data-sale="characters"]:checked').length);
-  $('#sale-status').textContent=!sale.enabled?'Venda automática desligada.':!sale.tiers.length&&!sale.characters.length?'Selecione uma raridade ou um personagem para começar a vender.':'Venda automática ligada para os próximos recrutamentos.';
-  $('#sale-trait-tier').value=String(saleTier);
-  $('#sale-tier-label').textContent=TIERS[saleTier-1];
-  const limit=$('#sale-trait-limit');
-  const below=Number(pendingSettings.get(settingKey(limit))?.value??rule.below);
-  if(!limit.options.length){
-    limit.add(new Option('Nenhuma por frequência','0'));
-    for(const n of [5,10,20,25,30,50,100,125,200,250,500,1000,2000,2001]){
-      limit.add(new Option('1/'+int.format(n),String(n)));
-    }
+  const summary=$('#sale-status');
+  if(summary){
+    summary.textContent=describeAutoSell(sale);
+    summary.classList.toggle('on',sale.enabled&&sale.tiers.length>0);
   }
-  if(!Array.from(limit.options).some(o=>o.value===String(below)))limit.add(new Option('1/'+int.format(below),String(below)));
-  limit.value=String(below);
-  for(const input of panel.querySelectorAll('[data-sale-trait]'))setChecked(input,rule.names.includes(input.dataset.saleTrait));
+  const vipBox=$('#autosell-vip-tags');
+  if(vipBox){
+    vipBox.innerHTML=sale.keepCharacters.length
+      ?sale.keepCharacters.map(id=>{
+        const c=CHARACTERS[id];
+        return `<span class="vip-chip">${esc(c.name)} <small>${TIERS[c.tier-1]}</small><button type="button" data-autosell-vip-remove="${id}" aria-label="Remover ${esc(c.name)} da lista VIP">×</button></span>`;
+      }).join('')
+      :'<small class="caption">Nenhum personagem VIP adicionado.</small>';
+  }
   for(const input of panel.querySelectorAll('[data-pref]'))input.checked=preferences[input.dataset.pref];
 }
 
@@ -978,7 +1030,7 @@ function renderModes(panel){
   const daily=raidInfo(),wt=weeklyTowerToday(gameNow()),next=(state.towerCleared??0)+1;
   const used=state.raid?.day===daily.day?state.raid.attempts:0;
   const bestToday=used?state.raid.bestDamage:0;
-  const claimedToday=state.raid?.day===daily.day&&Array.isArray(state.raid.claimed)?state.raid.claimed:[];
+  const claimedToday=state.raid?.day===daily.day&&Array.isArray(state.raid.claimed)?raidClaims(state.raid.claimed):[];
   const ready=state.team.some(uid=>readyAt(state,uid)<=gameNow());
   const playing=duel?.result===null,locked=(state.unlocked??0)<9,weeklyLocked=(state.unlocked??0)<5;
   const dayRaid=mode==='raid',isWeekly=mode==='weeklyTower';
@@ -1171,7 +1223,7 @@ function renderPanel(){
       <li><strong>Use o ouro para melhorar os próximos encontros.</strong> Em <b>Upgrades</b>, <b>Sorte</b> aumenta a chance de encontrar um recruta em lutas comuns até 50%. Depois, a Sorte melhora a chance de ele ser Raro ou superior. <b>Rastreio de raros</b> aumenta a chance de esse recruta ser de raridade Rara ou superior.</li>
       <li><strong>Avance para o próximo mundo.</strong> Em <b>Exploração</b>, marque <b>Avançar áreas, chefes e mundos</b>. O time muda de área ao atingir o nível necessário. Ao alcançar a meta de vitórias comuns ou de elite na última área, ele desafia o chefe e, ao vencer, segue para o próximo mundo. Escolher uma área ou mundo manualmente desliga essa opção. Marque-a de novo quando quiser continuar a campanha.</li>
     </ol>
-    <p><strong>Quando encontrar uma cópia repetida</strong>, confira a versão e a trait (característica especial) na ficha. Se ativar a venda automática em <b>Configurações</b>, a primeira normal e a primeira shiny de cada personagem ficam protegidas. Os filtros de venda passam a valer para as próximas cópias.</p>
+    <p><strong>Quando encontrar uma cópia repetida</strong>, confira a versão e a trait na ficha. Em <b>Configurações</b>, o novo <b>Auto-Sell</b> permite escolher rapidamente quais raridades vender, proteger a 1ª cópia normal, Shinies, Traits a partir da raridade desejada e manter uma Lista VIP de personagens para Despertar (★1–★5).</p>
     <p><strong>Se um inimigo estiver dando trabalho</strong>, confira a cor dele. No mapa abaixo, escolha <b>Defendendo</b> e selecione a cor do inimigo para descobrir quais cores causam mais dano contra ele.</p></section>
     ${colorChart()}
     <details><summary>Habilidades dos Transcendentes na Arena</summary>
@@ -1326,6 +1378,30 @@ document.addEventListener('click',e=>{
   }
   if(b.id==='use-elixir'){void transaction({type:'useElixir'}).then(ok=>{if(ok)note('Equipe recuperada instantaneamente!');});return;}
   if(b.dataset.useXpTome){void transaction({type:'useXpTome',uid:b.dataset.useXpTome}).then(ok=>{if(ok)note('+250.000 XP aplicado!');});return;}
+  if(b.id==='autosell-convert'){
+    if(confirm('Substituir as regras anteriores? A venda automática ficará desligada até você configurar o novo sistema.')){
+      void transaction({type:'autoSell',resetLegacy:true});
+    }
+    return;
+  }
+  if(b.dataset.autosellPreset!==undefined){
+    const tiers=b.dataset.autosellPreset?b.dataset.autosellPreset.split(',').map(Number):[];
+    void transaction({type:'autoSell',enabled:tiers.length>0,tiers});
+    return;
+  }
+  if(b.dataset.autosellTier){
+    void transaction({type:'autoSell',toggleTier:Number(b.dataset.autosellTier)});
+    return;
+  }
+  if(b.id==='autosell-vip-add'){
+    const sel=$('#autosell-vip-select');
+    if(sel?.value){void transaction({type:'autoSell',keepChar:sel.value,keep:true});sel.value='';}
+    return;
+  }
+  if(b.dataset.autosellVipRemove){
+    void transaction({type:'autoSell',keepChar:b.dataset.autosellVipRemove,keep:false});
+    return;
+  }
   if(b.dataset.awakenDup){
     const sac=$('#awaken-dup-select')?.value;
     if(sac&&confirm('Sacrificar a cópia selecionada + ouro para despertar este personagem?')){
@@ -1435,10 +1511,11 @@ document.addEventListener('change',e=>{const target=e.target;
   if(target.id==='save-file'){void importCampaign(target.files[0]);target.value='';return;}
   if(target.id==='swap-target'){pickSlot=Number(target.value);renderPanel();}
   if(target.dataset.replace&&target.value)void transaction({type:'equip',uid:target.value,replaced:target.dataset.replace});
-  if(target.id==='sale-trait-tier'){saleTier=Number(target.value);renderSettings($('#panel'));return;}
-  if(target.id==='sale-trait-limit')changeSetting(target,{type:'saleTrait',tier:saleTier,below:Number(target.value)});
-  if(target.dataset.saleTrait)changeSetting(target,{type:'saleTrait',tier:saleTier,name:target.dataset.saleTrait,checked:target.checked});
-  if(target.dataset.sale)changeSetting(target,{type:'saleSetting',group:target.dataset.sale,value:target.dataset.sale==='tiers'?Number(target.value):target.value,checked:target.checked});
+  if(target.id==='autosell-legacy-enabled')changeSetting(target,{type:'saleSetting',group:'enabled',checked:target.checked});
+  if(target.id==='autosell-enabled')changeSetting(target,{type:'autoSell',enabled:target.checked});
+  if(target.id==='autosell-first-normal')changeSetting(target,{type:'autoSell',keepFirstNormal:target.checked});
+  if(target.id==='autosell-shiny')changeSetting(target,{type:'autoSell',shinyRule:target.value});
+  if(target.id==='autosell-trait-tier')changeSetting(target,{type:'autoSell',minTraitTier:Number(target.value)});
   if(target.id==='auto-play')changeSetting(target,{type:target.checked?'resume':'pause'});
   if(target.id==='auto-routes')changeSetting(target,{type:'autoRoutes',enabled:target.checked});
   if(target.id==='explore-auto-routes')void transaction({type:'autoRoutes',enabled:target.checked});

@@ -15,6 +15,11 @@ export function affinity(a, b) {
 const distance = (a, b) => Math.hypot((a.x ?? a.slot * 20) - (b.x ?? b.slot * 20), (a.y ?? 50) - (b.y ?? 50));
 const MAIN_SKILLS = new Set(['piccolo','yamcha','kuririn','bulma','freeza-boss','ginyu','beam','rush','ward','heal']);
 
+function applyStun(unit,until){
+  if(unit.ccImmune){unit.ccImmune=false;return;}
+  unit.stunUntil=Math.max(unit.stunUntil??0,until);
+}
+
 export class Combate {
   constructor(rosters, { mode = 'duelo', limit = DEFAULT_LIMIT } = {}) {
     if (!['duelo', 'equipe'].includes(mode) || !Number.isInteger(limit) || limit < SAMPLE_STEP || limit > DEFAULT_LIMIT || rosters.length !== 2 || rosters.some(team => !team.length || team.length > 4)) {
@@ -44,7 +49,7 @@ export class Combate {
     for(const team of this.teams){
       const king=team.find(u=>hasTrait(u,'Haki do Rei'));
       if(king)for(const foe of this.teams[1-king.side]){
-        if(foe.ccImmune){foe.ccImmune=false;}else{foe.stunUntil=1500;}
+        applyStun(foe,1500);
         foe.exposedUntil=1500;
       }
     }
@@ -264,7 +269,7 @@ export class Combate {
         const damage=actor.magic*(domain?1.55:actor.hp<=actor.maxHp*.5?2.25:1.65);
         for(const foe of this.teams[target.side].filter(u=>this.present(u))){
           deliver(foe,{magic:true,area:true,damage});
-          if(domain&&!launch)foe.stunUntil=Math.max(foe.stunUntil??0,this.time+1500);
+          if(domain&&!launch)applyStun(foe,this.time+1500);
         }
         return true;
       }

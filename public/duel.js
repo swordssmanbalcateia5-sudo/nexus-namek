@@ -47,7 +47,7 @@ class Combate {
     for(const team of this.teams){
       const king=team.find(u=>hasTrait(u,'Haki do Rei'));
       if(king)for(const foe of this.teams[1-king.side]){
-        if(foe.ccImmune){foe.ccImmune=false;}else{applyNegative(foe,'stunUntil',1500);}
+        applyNegative(foe,'stunUntil',1500);
         applyNegative(foe,'exposedUntil',1500);
       }
     }
@@ -1510,6 +1510,11 @@ function interceptNegative(unit,key){
 function applyNegative(unit,key,value){
   const c=combatOf.get(unit),t=c?.time??0;
   const stunned=key==='stunUntil';
+  if(stunned&&unit.ccImmune){
+    unit.ccImmune=false;
+    unit.controlResistedAt=t;
+    return;
+  }
   if(interceptNegative(unit,key)||(stunned&&unit.freedomUntil>t)){
     if(stunned)unit.controlResistedAt=t;
     return;

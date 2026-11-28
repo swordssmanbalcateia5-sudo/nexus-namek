@@ -414,3 +414,24 @@ button.dex-card:hover,button.dex-card:focus-visible{border-color:#9de2c7;backgro
 .history-list li{display:flex;justify-content:space-between;gap:8px;font-size:.82rem;padding:6px 8px;border:1px solid #252733;border-radius:6px;background:#101218}
 .history-list .win{color:#81e6b3}.history-list .loss{color:#ff9494}
 .season-banner{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid #3b3754;border-radius:8px;background:#151221;margin:8px 0}
+/* Redesigned Auto-Sell UI */
+.autosell-card{display:grid;gap:14px;padding:14px;border:1px solid #2b2d3a;border-radius:10px;background:#0e1016;margin:10px 0 16px}
+.autosell-master{display:flex;align-items:center;gap:8px;font-size:.96rem}
+.autosell-summary{padding:10px 12px;border-radius:8px;border:1px solid #2c2f3d;background:#141720;font-size:.86rem;color:#c7cbd6}
+.autosell-summary.on{border-color:#5cc998;background:#0e1d17;color:#d6f7e7}
+.autosell-section{display:grid;gap:8px}
+.autosell-label{font-size:.82rem;font-weight:700;color:#b8becd;text-transform:uppercase;letter-spacing:.04em}
+.autosell-presets{display:flex;flex-wrap:wrap;gap:6px}
+.tier-pills{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:8px}
+.tier-pill{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:8px 10px;border:1px solid #2f3242;border-radius:8px;background:#13161f;color:#d8dce8;cursor:pointer;text-align:left;transition:border-color .15s,background .15s}
+.tier-pill small{font-size:.74rem;color:#9ea4b5}
+.tier-pill.active{border-color:#f5a97f;background:#261a14;color:#ffdfc9}
+.tier-pill.active small{color:#f5c3a6}
+.autosell-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.autosell-grid label{display:grid;gap:4px;font-size:.85rem}
+.vip-picker{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.vip-picker select{flex:1;min-width:200px}
+.vip-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.vip-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid #445773;border-radius:999px;background:#131c29;font-size:.8rem;color:#dce8ff}
+.vip-chip small{color:#9ab1d4;font-size:.72rem}
+.vip-chip button{border:0;background:none;color:#ffb4b4;cursor:pointer;font-size:.95rem;line-height:1;padding:0 2px}
