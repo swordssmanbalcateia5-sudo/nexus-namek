@@ -5024,7 +5024,7 @@ function recoveryBatchSize(state,now,conservative){
 async function sync(db,id,body){
   const row=await db.prepare('SELECT id,name,code,game,revision,last_seen FROM nexus_players WHERE id=?').bind(id).first();
   const state=JSON.parse(row.game),now=Date.now(),previous=state.pending;
-  const previousCollection=JSON.stringify(state.collection);
+  const previousCollection=JSON.stringify(state.collection),previousTower=state.towerCleared??0;
   const age=body.observationAge===undefined&&body.visible===true?0:body.observationAge;
   const seen=Number.isFinite(age)&&age>=0?now-age:null;
   const budget={remaining:recoveryBatchSize(state,now,body.conservativeRecovery===true),exhausted:false};
@@ -5041,17 +5041,20 @@ async function sync(db,id,body){
   const units=entries.map(e=>e.recruit||e.sold).filter(Boolean);
   const counter=units.length?await db.prepare('SELECT * FROM nexus_serials WHERE id=1').first():null;
   issueSerials(state,units,counter);
+  if(partial&&body.checkpoints!==true)reject(409,'Atualize a página para continuar a recuperação da campanha.','CLIENT_UPDATE_REQUIRED');
+  // Lotes da recuperação offline não são tempo de jogo: antes cada lote somava o intervalo desde o
+  // anterior em play_ms. last_seen fica como estava, e o primeiro sync normal depois disso também não soma.
   const delta=now-(row.last_seen??now);
-  const played=delta>0&&delta<=30000?delta:0;
+  const played=!partial&&delta>0&&delta<=30000?delta:0;
+  const lastSeen=partial?row.last_seen:body.visible===true?now:null;
   const ranks=JSON.stringify(state.collection)===previousCollection?[]:rankedUnits(state.collection,dexMastery(state));
   const rankFields=ranks.length?'power=?,top_units=?,rare_units=?,':'';
   const result=await db.prepare(`UPDATE nexus_players SET game=?,play_ms=play_ms+?,last_seen=?,
     ${rankFields}revision=revision+1 WHERE id=? AND revision=? AND (? IS NULL OR (SELECT revision FROM nexus_serials WHERE id=1)=?)`)
-    .bind(JSON.stringify(state),played,body.visible===true?now:null,...ranks,id,row.revision,counter?.revision??null,counter?.revision??null).run();
+    .bind(JSON.stringify(state),played,lastSeen,...ranks,id,row.revision,counter?.revision??null,counter?.revision??null).run();
   if(!result.meta.changes)reject(409,'A campanha está sendo atualizada. Tente novamente.','SYNC_CONTENTION');
-  if(changed||entries.length)invalidateRankings(db);
+  if(ranks.length||changed||(state.towerCleared??0)!==previousTower)invalidateRankings(db);
   if(partial){
-    if(body.checkpoints!==true)reject(409,'Atualize a página para continuar a recuperação da campanha.','CLIENT_UPDATE_REQUIRED');
     const awayLimit=(state.awayWindow?.start??state.clock)+12*3600000;
     return {catchingUp:true,processed:entries.length,remaining:Math.max(1,Math.min(now,awayLimit)-state.clock)};
   }

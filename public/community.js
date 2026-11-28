@@ -140,7 +140,11 @@ export function createCommunity({spriteURL,onSession,onChallenge}){
   }
   async function game(action,observationAge){
     const access=token;
-    const data=await synchronize({action,visible:!document.hidden,observationAge},access);
+    const body={action,visible:!document.hidden,observationAge};
+    // Uma sincronização por vez entre abas da mesma conta, para não disputarem a revisão.
+    const data=navigator.locks
+      ?await navigator.locks.request('nexus.online.sync',()=>synchronize(body,access))
+      :await synchronize(body,access);
     if(!data||access!==token)return null;
     me=data.player;
     return data;
