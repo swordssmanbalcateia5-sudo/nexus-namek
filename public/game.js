@@ -477,7 +477,7 @@ export const SKILL_EFFECTS = {
 SKILL_EFFECTS.ward=SKILL_EFFECTS.piccolo;
 SKILL_EFFECTS.rush=SKILL_EFFECTS.yamcha;
 const recruitPools = TIERS.map((_,i)=>Object.values(CHARACTERS).filter(c=>c.tier===i+1));
-const chanceByTier = [.57,.27,.112,.038,.008,.00165,.00032,.00003];
+const chanceByTier = [.57,.27,.11198,.038,.008,.00165,.00032,.00005];
 const passives={
   'Haki do Rei':'Ao iniciar a luta, trava as ações inimigas por 1,5 s e aumenta o dano sofrido por eles em +15%. Uma ativação por equipe.',
   'Kaidō':'Inicia o combate com um escudo protetor equivalente a 18% dos PV máximos.',
