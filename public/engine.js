@@ -207,6 +207,25 @@ export class Combate {
     const deliver = launch ?? ((victim,options)=>this.hit(actor,victim,options));
     const strike = options => deliver(target,options);
     switch (type) {
+      case 'singular_dio':
+        if(actor.skillReady>this.time)return false;
+        actor.skillReady=this.time+10000;
+        strike({damage:actor.attack*2.10,removeShield:true});
+        for(let i=0;i<4&&this.present(target);i++)strike({damage:actor.attack*.25});
+        if(this.present(target))strike({damage:actor.magic*.80,magic:true,area:true});
+        return true;
+      case 'singular_xeno':
+        if(actor.skillReady>this.time)return false;
+        actor.skillReady=this.time+12000;
+        strike({damage:actor.magic*2.15,magic:true});
+        for(let i=0;i<2&&this.present(target);i++)strike({damage:actor.magic*.55,magic:true});
+        return true;
+      case 'singular_saitama':
+        if(actor.skillReady>this.time)return false;
+        actor.skillReady=this.time+9000;
+        strike({damage:actor.attack*1.90});
+        if(this.present(target))strike({damage:actor.attack*1.30});
+        return true;
       case 'koto':
         if(actor.skillReady>this.time)return false;
         actor.skillReady=this.time+8000;

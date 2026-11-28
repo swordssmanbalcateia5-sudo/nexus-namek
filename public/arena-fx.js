@@ -1,5 +1,5 @@
 import {paintBossEffects} from './boss-fx.js';
-import {effects,ballAnimations} from './arena-assets.js';
+import {effects,ballAnimations,singularSheets} from './arena-assets.js';
 const thirdKits={
  m3_ace:{wind:.22,speed:91,range:56,radius:2.7,art:'hiken',cd:8},
  m3_genos:{wind:.36,speed:151,range:68,radius:2.2,art:'incinerador',cd:9},
@@ -42,6 +42,48 @@ function loadSheets(){
     const image=new Image();
     image.onload=()=>{sheets[name]=image;};
     image.src='art/transcendentes/'+name+'.png';
+  }
+}
+const singularImages={};
+function paintSingularEffects(ctx,match,motion){
+  function draw(art,point,born,{size=18,angle=0,stand=false}={}){
+    const info=singularSheets[art];
+    if(!info)return;
+    const [url,width,height,frames,ms,pivot,loop]=info;
+    const im=loadArt(singularImages,art,url);
+    if(!im)return;
+    const age=Math.max(0,match.t-born)*1000;
+    const frame=motion?(loop?Math.floor(age/ms)%frames:Math.min(frames-1,Math.floor(age/ms))):0;
+    const ratio=size/Math.max(width,height);
+    ctx.save();
+    ctx.translate(point.x,point.y);
+    if(stand){
+      ctx.scale(Math.cos(angle)<0?-1:1,1);
+      ctx.rotate(Math.sin(angle)*.22);
+    }else ctx.rotate(angle);
+    ctx.drawImage(im,frame*width,0,width,height,-pivot[0]*ratio,-pivot[1]*ratio,width*ratio,height*ratio);
+    ctx.restore();
+  }
+  for(const effect of match.singularFx??[]){
+    const point=effect.follow===undefined?effect:match.sides[effect.follow];
+    draw(effect.art,point,effect.born,{...effect,size:effect.size??(effect.stand?22:17)});
+    if(effect.direction){
+      ctx.save();
+      ctx.translate(point.x,point.y);
+      ctx.rotate(effect.angle);
+      ctx.strokeStyle='#ffdd8d';ctx.lineWidth=.35;
+      ctx.beginPath();ctx.moveTo(2,0);ctx.lineTo(9,0);ctx.lineTo(7,-1.5);ctx.moveTo(9,0);ctx.lineTo(7,1.5);ctx.stroke();
+      ctx.restore();
+    }
+  }
+  for(const shot of match.shots){
+    if(shot.singular)draw(shot.art,shot,shot.born,{angle:shot.angle,size:13});
+  }
+  for(const side of match.sides){
+    if(side.dash?.art!=='dio_investida')continue;
+    const {born,angle}=side.dash;
+    draw('dio_investida',side,born,{angle,size:19});
+    draw('dio_stand_punho',side,born,{angle,stand:true,size:24});
   }
 }
 export function paintTranscendentes(canvas,match,motion,balls=[],finishAge=0){
@@ -152,6 +194,7 @@ function paintBallAction(m,unit,side,index){
 }
  ctx.setTransform(canvas.width/100,0,0,canvas.height/50,0,0);ctx.clearRect(0,0,100,50);ctx.imageSmoothingEnabled=false;
  if(modern)paintBossEffects(ctx,match,motion,finishAge);
+ paintSingularEffects(ctx,match,motion);
  if(match.result)return drawn;
  if(modern){secondDraw(match);mythDraw(match);divineDraw(match);}
 
@@ -182,7 +225,7 @@ function paintBallAction(m,unit,side,index){
  for(const e of match.starShots??[])batchArt('yuno_estrela',e.x,e.y,10,match.t-e.born);
  const zones=false;
  for(const s of match.shots){
-   if(s.kind==='bossShot')continue;
+   if(s.kind==='bossShot'||s.singular)continue;
    const zone=['room','zone'].includes(s.kind),age=match.t-s.born,r=s.radius*(zone?Math.min(1,age/.3):1);
    if(s.kind==='tremor'){
      if(!s.support && age<.48){

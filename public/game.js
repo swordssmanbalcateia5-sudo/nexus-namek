@@ -109,7 +109,7 @@ export const WORLDS = [
 export const worldOf = state=>WORLDS[state.world??0];
 export const levelCap = state=>10*(1+(state.unlocked??0));
 export const COLORS = {Verde:'#71dd9f',Laranja:'#ffab68',Amarelo:'#f5d66c',Azul:'#83baff',Branco:'#ecebff',Roxo:'#cc95ff',Rosa:'#f592bc',Preto:'#a8a2be',Vermelho:'#ff8290',Turquesa:'#70e1da',Dourado:'#ffe28a'};
-export const TIERS = ['Comum','Incomum','Rara','Épica','Mítica','Divina','Secreta','Transcendente'];
+export const TIERS = ['Comum','Incomum','Rara','Épica','Mítica','Divina','Secreta','Transcendente','Singular'];
 // PV, ataque, magia, defesa, resistência e velocidade no nível 1, antes da função.
 // Degrau de +22% a +30% por raridade, garantindo Tier N Normal < Tier N Shiny (+12%) < Tier N+1 Normal.
 const baseStats = [
@@ -120,10 +120,14 @@ const baseStats = [
   [230, 46, 46, 28, 28, 109],
   [290, 58, 58, 35, 35, 112],
   [370, 74, 74, 44, 44, 116],
-  [480, 96, 96, 58, 58, 120]
+  [480, 96, 96, 58, 58, 120],
+  [590, 118, 118, 71, 71, 124]
 ];
 const roles = {Combatente:[.10,.25,-.15,0,0,0],Guardião:[.25,-.10,0,.25,.15,0],Mágico:[-.15,0,.30,0,.10,0],Suporte:[0,-.15,.15,0,.15,.05]};
 const roster = [
+  ['dio-over-heaven','DIO Over Heaven',9,'Roxo','Combatente','singular_dio','Sobrescrita da Realidade',['Equipe',{attack:18,magic:12}],'ap-dio-over-heaven','JoJo'],
+  ['goku-xeno-limite-rompido','Goku Xeno',9,'Vermelho','Mágico','singular_xeno','Kamehameha do Limite Rompido',['Equipe',{magic:20,speed:8}],'ap-goku-xeno-limite-rompido','Dragon Ball'],
+  ['saitama-eco-do-futuro','Saitama · Eco do Futuro',9,'Dourado','Combatente','singular_saitama','Soco de Dois Tempos',['Equipe',{attack:20,hp:12}],'ap-saitama-eco-do-futuro','One Punch Man'],
   ["hoova-shisui","Hoova · Shisui Uchiha",6,"Verde","Mágico","koto","Kotoamatsukami",["Verde",{magic:15,speed:8}],"ap-hoova-shisui","Naruto"],
   ["zawa-cheon","Zawa · Cheon Yeo Woon",7,"Roxo","Combatente","demonSword","Espada do Demônio Celestial",["Roxo",{attack:20,speed:8}],"ap-zawa-cheon","Nano Machine"],
   ["careca-kumagawa","Careca · Kumagawa Misogi",8,"Preto","Suporte","fiction","All Fiction",["Equipe",{magic:18,resistance:10}],"ap-careca-kumagawa","Medaka Box"],
@@ -277,7 +281,11 @@ const roster = [
   ["eternal-sailor-moon", "Eternal Sailor Moon", 8, "Branco", "Suporte", "heal", "Luz da Lua Eterna", ["Suporte", {"hp": 8}], "ap-eternal-sailor-moon", "Sailor Moon"],
   ["anos-voldigoad", "Anos Voldigoad", 7, "Preto", "Mágico", "beam", "Destruição da Fonte", ["Mágico", {"magic": 8}], "ap-anos-voldigoad", "The Misfit of Demon King Academy"],
 ];
-const approvedArt = {"hoova-shisui":"hoova-shisui","zawa-cheon":"zawa-cheon","careca-kumagawa":"careca-kumagawa",
+const approvedArt = {
+  'dio-over-heaven':'dio-over-heaven',
+  'goku-xeno-limite-rompido':'goku-xeno-limite-rompido',
+  'saitama-eco-do-futuro':'saitama-eco-do-futuro',
+"hoova-shisui":"hoova-shisui","zawa-cheon":"zawa-cheon","careca-kumagawa":"careca-kumagawa",
   "yamcha": "yamcha",
   "bulma": "bulma",
   "piccolo": "piccolo",
@@ -442,6 +450,10 @@ export const CHARACTERS = Object.fromEntries(roster.map(([id,name,tier,color,rol
     sprite:approvedArt[id]?'ap-'+approvedArt[id]:sprite,universe}];
 }));
 export const SKILL_EFFECTS = {
+  singular_dio:'Arena: investida de 210% do Ataque que remove escudos, quatro socos de 25% e uma fenda de 80% da Magia. No banco, reduz o próximo golpe em 65% e lança um contrasselo de 135% da Magia.',
+  singular_xeno:'Arena: um feixe de 215% da Magia e dois fragmentos de 55%. No banco, abre duas fendas com feixes de 85% da Magia cada.',
+  singular_saitama:'Arena: soco de 190% do Ataque com eco de 130%. No banco, arma uma zona de defesa e dispara uma contraonda de 155% do Ataque.',
+
   koto:'Genjutsu de 150% da Magia. A próxima habilidade do alvo causa 35% menos dano. Na Arena, causa 175% da Magia e marca por 4 s, reduzindo o próximo golpe em 40%. Recarga de 8 s.',
   demonSword:'Três cortes de 65% do Ataque. O terceiro ignora metade da Defesa. Na Arena, dispara duas lâminas de 70%. Se alguma acertar, lança um corte de 100% que ignora metade da Defesa. Recarga de 7 s.',
   fiction:'Na campanha, apaga um golpe fatal contra si uma vez por batalha. Na Arena, lança um parafuso de 130% da Magia e protege o aliado ativo por 4 s. Apaga até 180% da Magia em dano do próximo golpe. Recarga de 10 s.',
@@ -477,7 +489,7 @@ export const SKILL_EFFECTS = {
 SKILL_EFFECTS.ward=SKILL_EFFECTS.piccolo;
 SKILL_EFFECTS.rush=SKILL_EFFECTS.yamcha;
 const recruitPools = TIERS.map((_,i)=>Object.values(CHARACTERS).filter(c=>c.tier===i+1));
-const chanceByTier = [.57,.27,.11198,.038,.008,.00165,.00032,.00005];
+const chanceByTier = [.57,.27,.11197,.038,.008,.00165,.00032,.00005,.00001];
 const passives={
   'Haki do Rei':'Ao iniciar a luta, trava as ações inimigas por 1,5 s e aumenta o dano sofrido por eles em +15%. Uma ativação por equipe.',
   'Kaidō':'Inicia o combate com um escudo protetor equivalente a 18% dos PV máximos.',
@@ -832,7 +844,7 @@ export function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=U
   let p=random(),tier=1;
   const weights=recruitWeights(rates.rare);
   for(const weight of weights){if(p<weight)break;p-=weight;tier++;}
-  tier=Math.min(tier,8);
+  tier=Math.min(tier,TIERS.length);
   const pool=recruitPools[tier-1];
   const local=pool.filter(c=>c.universe===universe);
   // One ticket per character globally, plus a second ticket for each local character.
@@ -850,7 +862,7 @@ export function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=U
   return {id:card.id,shiny,trait:trait?.name??null,oddsBasis:'recruitable',odds:Math.round(1/(weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
 }
 
-export const SALE_PRICES=[8,20,50,125,350,1000,3500,12000];
+export const SALE_PRICES=[8,20,50,125,350,1000,3500,12000,40000];
 export const RECOVERY_MS=20000;
 export function readyAt(state,uid){
   return Math.max(state.partyRecovery??0,state.recovery?.[uid]??0);
@@ -1020,7 +1032,11 @@ function settle(state,battle){
       if(saleMatches(state.autoSell,copy,state.collection)){
         entry.sold=copy;entry.saleGold=SALE_PRICES[tier-1];entry.gold+=entry.saleGold;state.gold+=entry.saleGold;
         if(tier>=5){state.items??={};state.items.essence=(state.items.essence??0)+(tier-4);}
-      }else{state.collection.push(copy);entry.recruit=copy;}
+      }else{
+        state.collection.push(copy);
+        entry.recruit=copy;
+        if(tier===9)state.singularDiscovered=true;
+      }
     }
     if(battle.boss && !battle.towerFloor){
       state.completed=true;
@@ -1307,7 +1323,7 @@ function ballChallenge(state,action,now){
     }
   }
   state.ballSequence=(state.ballSequence??0)+1;
-  state.ballRun={physics:5,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
+  state.ballRun={physics:6,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
   return true;
 }
 export function challenge(state,now){

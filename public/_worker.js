@@ -252,6 +252,25 @@ class Combate {
     const deliver = launch ?? ((victim,options)=>this.hit(actor,victim,options));
     const strike = options => deliver(target,options);
     switch (type) {
+      case 'singular_dio':
+        if(actor.skillReady>this.time)return false;
+        actor.skillReady=this.time+10000;
+        strike({damage:actor.attack*2.10,removeShield:true});
+        for(let i=0;i<4&&this.present(target);i++)strike({damage:actor.attack*.25});
+        if(this.present(target))strike({damage:actor.magic*.80,magic:true,area:true});
+        return true;
+      case 'singular_xeno':
+        if(actor.skillReady>this.time)return false;
+        actor.skillReady=this.time+12000;
+        strike({damage:actor.magic*2.15,magic:true});
+        for(let i=0;i<2&&this.present(target);i++)strike({damage:actor.magic*.55,magic:true});
+        return true;
+      case 'singular_saitama':
+        if(actor.skillReady>this.time)return false;
+        actor.skillReady=this.time+9000;
+        strike({damage:actor.attack*1.90});
+        if(this.present(target))strike({damage:actor.attack*1.30});
+        return true;
       case 'koto':
         if(actor.skillReady>this.time)return false;
         actor.skillReady=this.time+8000;
@@ -909,6 +928,7 @@ class Combate {
     const mitigation = (magic ? victim.resistance : victim.defense) * (1 - ignoreDefense);
     let value = (attack.vectorPower??this.outgoingPower(source,damage,!skill)) * interceptFactor * (victim.domainWard?.85:1) * (victim.exposedUntil>this.time?1.15:1) * affinity(source.color,victim.color) * (openPower ? 1.3 : 1) * 40 / (40 + mitigation/(source.scale || 1));
     if(elasticSave)value*=1-elastic.ratio;
+    if(this.arena&&victim.singularSeal)value*=applySingularSeal(this.arena,victim,reflected);
     if(charge){
       charge.cancelled=true;
       if(victim.dragonCharge===charge)victim.dragonCharge=null;
@@ -1413,7 +1433,7 @@ const arenaKinds={
 };
 function arenaFighter(f){
   const kind=arenaKinds[f.id]??f.kind;
-  return {...f,characterId:f.id,kind,signatureAssist:f.signatureAssist||divineIds.has(kind)||Boolean(secondKits[kind])||mythKinds.has(kind)||kind==='aizen'||kind==='luminous'};
+  return {...f,characterId:f.id,kind,signatureAssist:f.signatureAssist||Boolean(singularSkills[kind])||divineIds.has(kind)||Boolean(secondKits[kind])||mythKinds.has(kind)||kind==='aizen'||kind==='luminous'};
 }
 function launchBall(side,index,random){
   // Sample each ball independently in the inward-facing arc.
@@ -1436,7 +1456,7 @@ function createDuel(left,right,limit=120,seed=crypto.getRandomValues(new Uint32A
     launchBall(side,index,random);
     if(side.team[0]?.kind==='pucci_mih')side.team[0].enteredAt=0;
   });
-  const match={combat,sides,limit,launchSeed:seed>>>0,random,skills:[],shots:[],flashes:[],t:0,result:null,events:[],damageFeed:[],contact:0,contacts:0,reflections:[],mirages:[],secretSeq:0,groundEffects:[],secretCharges:[],psychicPulses:[],elasticReturns:[],starShots:[],orbVolleys:[]};
+  const match={combat,sides,limit,launchSeed:seed>>>0,random,skills:[],shots:[],flashes:[],t:0,result:null,events:[],damageFeed:[],contact:0,contacts:0,reflections:[],mirages:[],secretSeq:0,groundEffects:[],secretCharges:[],psychicPulses:[],elasticReturns:[],starShots:[],orbVolleys:[],singularFx:[],singularEvents:[],singularFields:[]};
   combat.arena=match;
   combat.enqueueReflection=(f,attack)=>match.reflections.push({f,attack});
   return match;
@@ -1464,7 +1484,7 @@ function movementSpeed(unit,now){
   const base=Math.min(48,26+unit.speed*.065);
   const wall=unit.wallBoost?.until>now?unit.wallBoost.stacks*unit.wallBoost.perBounce:0;
   const assist=unit.pucciAssistUntil>now?.15:0;
-  return base*pucciMultiplier(unit,now)*(1+wall+assist);
+  return base*(unit.singularKnockbackUntil>now?1.35:1)*pucciMultiplier(unit,now)*(1+wall+assist);
 }
 function move(m,s,unit,dt=DT){
   const now=m.combat.time;
@@ -2062,7 +2082,176 @@ function stepBossShot(m,s,target,other,previous){
   return false;
 }
 
+const singularSkills={
+  singular_dio:{main:'Sobrescrita da Realidade',assist:'Correção do Destino',mainCd:10,assistCd:15},
+  singular_xeno:{main:'Kamehameha do Limite Rompido',assist:'Patrulha das Duas Fendas',mainCd:12,assistCd:14},
+  singular_saitama:{main:'Soco de Dois Tempos',assist:'Soco Fora de Quadro',mainCd:9,assistCd:13},
+};
+function singularFx(m,art,point,duration,options={}){
+  const effect={art,x:point.x,y:point.y,born:m.t,until:m.t+duration,...options};
+  m.singularFx.push(effect);
+  return effect;
+}
+function singularAfter(m,f,delay,run){
+  m.singularEvents.push({at:m.t+delay,f,run});
+}
+function singularAim(from,to){
+  return Math.atan2(to.y-from.y,to.x-from.x);
+}
+function singularPoint(point,angle,offset){
+  return {x:Math.max(R,Math.min(100-R,point.x+Math.cos(angle)*offset)),
+    y:Math.max(R,Math.min(50-R,point.y+Math.sin(angle)*offset))};
+}
+function singularShot(m,f,art,from,angle,damage,{magic=false,impact,knockback=false,speed=110,range=75,visual=false,radius=2.5}={}){
+  const offset=visual?0:1;
+  m.shots.push({kind:'batch',art,angle,side:f.side,f,born:m.t,speed,range,radius,
+    x:from.x+offset*Math.cos(angle),y:from.y+offset*Math.sin(angle),singular:true,visual,
+    attacks:[{damage,magic,impact,knockback}]});
+}
+function castSingular(m,f,role){
+  const bench=role==='reserva',kit=singularSkills[f.kind];
+  const side=m.sides[f.side],enemy=m.sides[1-f.side],ally=side.team[side.slot];
+  f.ready=m.t+(bench?kit.assistCd:kit.mainCd);
+  announce(m,f,bench?kit.assist:kit.main,role);
+  if(f.kind==='singular_dio'){
+    if(bench){
+      ally.singularSeal={owner:f,until:m.t+2.8};
+      singularFx(m,'dio_ancora',side,2.8,{follow:f.side,seal:ally.singularSeal,carrier:ally});
+      singularFx(m,'dio_stand_guarda',side,2.8,{follow:f.side,seal:ally.singularSeal,carrier:ally,stand:true});
+      singularAfter(m,f,2.8,()=>{
+        if(ally.singularSeal?.owner===f){
+          delete ally.singularSeal;
+          singularFx(m,'dio_stand_guarda_fim',side,.275,{stand:true});
+        }
+      });
+      return true;
+    }
+    const angle=singularAim(side,enemy);
+    singularFx(m,'dio_carga',side,.36,{follow:f.side,angle});
+    singularFx(m,'dio_stand_invocacao',side,.36,{follow:f.side,angle,stand:true});
+    singularFx(m,'dio_relogio',side,.72,{size:17*112/51,radius:17});
+    m.singularFields.push({kind:'clock',f,x:side.x,y:side.y,ready:m.t+.18,until:m.t+.72,radius:17});
+    singularAfter(m,f,.36,()=>{
+      if(!m.combat.present(f)||m.combat.blocked(f))return;
+      side.dash={art:'dio_investida',born:m.t,angle:singularAim(side,enemy),speed:117,duration:.37,
+        attack:{damage:f.attack*2.10,removeShield:true}};
+    });
+    return true;
+  }
+  if(f.kind==='singular_xeno'){
+    const angle=singularAim(side,enemy);
+    if(bench){
+      for(const [i,deviation] of [-.55,.55].entries()){
+        const gate=singularPoint(side,angle+deviation,14);
+        const locked=singularAim(gate,enemy);
+        singularFx(m,'xeno_fenda_banco',gate,.88,{angle:locked,direction:true});
+        singularAfter(m,f,i===0?.58:.70,()=>{
+          singularFx(m,'xeno_rompimento',gate,.275);
+          singularShot(m,f,'xeno_fragmento',gate,locked,f.magic*.85,{magic:true,impact:'xeno_impacto'});
+        });
+      }
+      return true;
+    }
+    const entrance=singularPoint(side,angle,13);
+    const exit=singularPoint(enemy,angle+Math.PI*.75,23);
+    const locked=singularAim(exit,enemy);
+    singularFx(m,'xeno_carga',side,.66,{follow:f.side,angle});
+    [entrance,exit].forEach(point=>singularFx(m,'xeno_fenda',point,1.4,{angle:locked,direction:true}));
+    singularAfter(m,f,.66,()=>{
+      if(!m.combat.present(f)||m.combat.blocked(f))return;
+      const range=Math.hypot(entrance.x-side.x,entrance.y-side.y);
+      if(range>0)singularShot(m,f,'xeno_feixe',side,singularAim(side,entrance),0,{speed:147,range,visual:true});
+      singularAfter(m,f,range/147,()=>{
+        singularFx(m,'xeno_rompimento',exit,.275);
+        singularShot(m,f,'xeno_feixe',exit,locked,f.magic*2.15,{magic:true,impact:'xeno_impacto',speed:147});
+        for(const [i,deviation] of [-8,8].entries())singularAfter(m,f,.18*(i+1),()=>
+          singularShot(m,f,'xeno_fragmento',exit,locked+deviation*Math.PI/180,f.magic*.55,{magic:true,impact:'xeno_impacto'}));
+      });
+    });
+    return true;
+  }
+  if(bench){
+    const effect=singularFx(m,'saitama_area',side,2.13,{size:13*112/51});
+    m.singularFields.push({kind:'guard',f,x:side.x,y:side.y,ready:m.t+.28,until:m.t+2.13,radius:13,effect});
+    return true;
+  }
+  singularFx(m,'saitama_carga',side,.24,{follow:f.side,angle:singularAim(side,enemy)});
+  singularAfter(m,f,.24,()=>{
+    if(!m.combat.present(f)||m.combat.blocked(f))return;
+    const angle=singularAim(side,enemy),origin=singularPoint(side,angle,R);
+    singularShot(m,f,'saitama_onda',origin,angle,f.attack*1.90,{impact:'saitama_impacto',knockback:true});
+    singularFx(m,'saitama_eco',origin,.48,{angle});
+    singularAfter(m,f,.48,()=>singularShot(m,f,'saitama_onda_eco',origin,angle,f.attack*1.30,{impact:'saitama_impacto',knockback:true}));
+  });
+  return true;
+}
+function strikeSingularDash(m,f,target,dash,point){
+  const log=m.combat.log.length;
+  m.combat.hit(f,target,{...dash.attack,dash:true});
+  if(!m.combat.log.slice(log).some(e=>e.type==='dano'&&e.actor===f.id&&e.target===target.id))return;
+  const side=m.sides[f.side],origin={x:side.x,y:side.y};
+  singularFx(m,'dio_fratura',point,.33);
+  singularFx(m,'dio_fissura',point,.42,{size:10*112/51,radius:10});
+  singularFx(m,'dio_stand_muda',origin,.44,{angle:dash.angle,stand:true});
+  for(const delay of [.06,.14,.22,.30])singularAfter(m,f,delay,()=>
+    singularShot(m,f,'dio_muda_contato',origin,dash.angle,f.attack*.25,{speed:86,range:10,radius:1.65,impact:'dio_muda_contato'}));
+  singularAfter(m,f,.42,()=>{
+    const other=m.sides[1-f.side],victim=other.team[other.slot];
+    singularFx(m,'dio_pulso',point,.35,{size:10*112/51});
+    if(m.combat.present(victim)&&Math.hypot(other.x-point.x,other.y-point.y)<=10+R){
+      const start=m.combat.log.length;
+      m.combat.hit(f,victim,{damage:f.magic*.80,magic:true,area:true});
+      if(m.combat.log.slice(start).some(e=>e.type==='dano'&&e.target===victim.id))
+        singularFx(m,'dio_tempo',other,.52);
+    }
+  });
+}
+function applySingularSeal(m,victim,reflected){
+  const seal=victim.singularSeal;
+  if(reflected||!seal||seal.until<m.t||!m.combat.alive(seal.owner))return 1;
+  delete victim.singularSeal;
+  const from=m.sides[victim.side],other=m.sides[1-victim.side],origin={x:from.x,y:from.y};
+  const angle=singularAim(from,other),f=seal.owner;
+  singularFx(m,'dio_selagem',origin,.275);
+  singularFx(m,'dio_stand_contrasselo',origin,.275,{angle,stand:true});
+  singularAfter(m,f,0,()=>singularShot(m,f,'dio_contra',origin,angle,f.magic*1.35,{magic:true,impact:'dio_selagem',speed:108,range:66}));
+  return .35;
+}
+function stepSingular(m,previous){
+  const c=m.combat;
+  m.singularFx=m.singularFx.filter(e=>m.t<e.until&&(!e.carrier||e.carrier.singularSeal===e.seal));
+  m.singularFields=m.singularFields.filter(zone=>{
+    if(m.t>=zone.until||!c.alive(zone.f)){
+      if(zone.effect)zone.effect.until=m.t;
+      return false;
+    }
+    if(m.t<zone.ready)return true;
+    const side=1-zone.f.side,target=m.sides[side],victim=target.team[target.slot];
+    const [x,y]=previous[side];
+    const contact=c.present(victim)&&traceHit(x-zone.x,y-zone.y,target.x-x,target.y-y,zone.radius+R);
+    if(zone.kind==='clock'){
+      if(!contact)return true;
+      applyNegative(victim,'stunUntil',Math.max(victim.stunUntil??0,c.time+520));
+      if(victim.stunUntil>c.time)singularFx(m,'dio_tempo',target,.52,{follow:side});
+      return false;
+    }
+    const shot=m.shots.find(p=>p.side===side&&!p.visual&&Number.isFinite(p.speed)&&p.speed>0&&
+      traceHit(p.x-zone.x,p.y-zone.y,Math.cos(p.angle)*p.speed*DT,Math.sin(p.angle)*p.speed*DT,zone.radius+(p.radius??0)));
+    if(!contact&&!shot)return true;
+    zone.effect.until=m.t;
+    if(shot)m.shots.splice(m.shots.indexOf(shot),1);
+    const angle=shot?shot.angle+Math.PI:singularAim(zone,target);
+    singularFx(m,'saitama_intercepta',zone,.275);
+    singularShot(m,zone.f,'saitama_onda_banco',zone,angle,zone.f.attack*1.55,{impact:'saitama_impacto',knockback:true});
+    return false;
+  });
+  const due=m.singularEvents.filter(e=>e.at<=m.t);
+  m.singularEvents=m.singularEvents.filter(e=>e.at>m.t);
+  for(const e of due)if(c.alive(e.f))e.run();
+}
+
 function arenaCast(m,f,enemy,role){
+  if(singularSkills[f.kind])return castSingular(m,f,role);
   if(bossKits[f.kind])return queueBossMove(m,f,enemy,role);
   if(divineIds.has(f.kind))return divineCast(m,f,enemy,role);
   if(thirdKits[f.kind])return thirdCast(m,f,enemy,role);
@@ -2576,6 +2765,13 @@ function resolveShots(m,previous){
   m.shots=m.shots.filter(s=>{
     const caster=m.sides[s.side],other=m.sides[1-s.side],victim=other.team[other.slot];
     if(!m.combat.alive(s.f)||!victim||!m.combat.present(victim))return false;
+    if(s.visual){
+      const distance=Math.min(s.range-(s.traveled??0),s.speed*DT);
+      s.x+=Math.cos(s.angle)*distance;
+      s.y+=Math.sin(s.angle)*distance;
+      s.traveled=(s.traveled??0)+distance;
+      return s.traveled<s.range;
+    }
     if(s.kind==='bossShot')return stepBossShot(m,s,victim,other,previous);
     if(s.kind==='echoArea'){
       const age=m.t-s.born;if(age<.16)return true;
@@ -2692,6 +2888,16 @@ function resolveShots(m,previous){
           addPsychic(m,s.f,other,'luffy_onda',.18,16,0,attack.secretCast,{damage:s.f.attack*.65,magic:false});
         if(attack.nail&&m.combat.alive(victim))applyDot(m,s.f,victim,'johnny_rotacao',s.f.magic*.09,.6,8);
         if(attack.first&&shield>0&&victim.shield<=0){attack.first.broken=victim.id;m.flashes.push({art:'ichigo_quebra',follow:victim.side,time:m.t})}
+        if(s.singular){
+          if(attack.impact)singularFx(m,attack.impact,other,.3);
+          if(attack.knockback){
+            const point=singularPoint(other,s.angle,3);
+            other.x=point.x;other.y=point.y;
+            other.vx=Math.cos(s.angle)*36;other.vy=Math.sin(s.angle)*36;
+            victim.singularKnockbackUntil=m.combat.time+650;
+          }
+          return false;
+        }
         const a=Math.atan2(s.y-other.y,s.x-other.x);
         m.flashes.push({art:({asta_corte:'asta_estilhaco',asta_retorno:'asta_estilhaco',madara_disparo:'madara_impacto',yuno_disparo:'yuno_impacto',yuno_basico:'yuno_impacto',shanks_corte:'shanks_impacto',broly_onda:'broly_impacto',blast_disparo:'blast_impacto',luffy_chicote:'luffy_impacto',vegeta_feixe:'vegeta_impacto',kaido_sopro:'kaido_impacto',tetsuo_basico:'tetsuo_impacto',mob_descarga:'mob_impacto',mob_basico:'mob_impacto',benimaru_corte:'benimaru_impacto',veldora_raio:'veldora_impacto',veldora_basico:'veldora_impacto',luminous_lanca:'luminous_impacto',anos_fonte:'anos_impacto',anos_basico:'anos_impacto',anos_retorno:'anos_impacto',aizen_estilhacos:'aizen_estilhacos',yamamoto_corte:'yamamoto_contato',yamamoto_basico:'yamamoto_contato',johnny_disparo:'johnny_ruptura',johnny_basico:'johnny_ruptura',ichigo_primeira:'ichigo_contato',ichigo_segunda:'ichigo_contato',roger_corte_apoio:'roger_contato_apoio',rimuru_retorno:'rimuru_contato',accelerator_reflexo:'accelerator_contato',garou_copia:'garou_nova',meliodas_corte:'meliodas_contato',simon_broca:'simon_impacto',meruem_esfera:'meruem_impacto',meruem_lamina:'meruem_impacto',beerus_hakai:'beerus_dissipacao',beerus_basico:'beerus_dissipacao',kaguya_basico:'kaguya_fragmentos',shinra_golpe:'contato_dourado'})[s.art]??(s.art==='saitama_soco'?'saitama_impacto':s.art==='sukuna_basico'?'sukuna_corte':'contato_azul'),x:other.x+R*Math.cos(a),y:other.y+R*Math.sin(a),time:m.t});
       }
@@ -2795,9 +3001,10 @@ function stepDuel(m){
     const ux=Math.cos(s.dash.angle),uy=Math.sin(s.dash.angle);
     const wallX=ux>0?(100-R-s.x)/ux:ux<0?(R-s.x)/ux:Infinity;
     const wallY=uy>0?(50-R-s.y)/uy:uy<0?(R-s.y)/uy:Infinity;
-    const dist=Math.min(110*DT,wallX,wallY);
+    const speed=s.dash.speed??110;
+    const dist=Math.min(speed*DT,wallX,wallY);
     s.x+=dist*ux;s.y+=dist*uy;
-    if(dist<110*DT||m.t-s.dash.born>=.4)delete s.dash;
+    if(dist<speed*DT||m.t-s.dash.born>=(s.dash.duration??.4))delete s.dash;
   });
   secondStep(m,previous);waterStep(m,previous);
   charging.forEach((dash,i)=>{
@@ -2811,7 +3018,8 @@ function stepDuel(m){
     s.x=x+t*(s.x-x);s.y=y+t*(s.y-y);
     delete s.dash;
     const flash={kind:'rei',x:(s.x+ox+t*(o.x-ox))/2,y:(s.y+oy+t*(o.y-oy))/2,time:m.t,angle:dash.angle};
-    if(dash.art==='boss_arlong_dash')bossHit(m,active[i],enemy,{...dash.attack,dash:true},flash,dash.angle);
+    if(dash.art==='dio_investida')strikeSingularDash(m,active[i],enemy,dash,flash);
+    else if(dash.art==='boss_arlong_dash')bossHit(m,active[i],enemy,{...dash.attack,dash:true},flash,dash.angle);
     else{
       const start=combat.log.length;
       combat.hit(active[i],enemy,{...dash.attack,dash:true});
@@ -2821,6 +3029,10 @@ function stepDuel(m){
     }
     m.contact=Math.max(m.contact,m.t+.45);
   });
+  for(const [i,dash] of charging.entries()){
+    if(dash?.art==='dio_investida'&&!m.sides[i].dash&&!m.singularFx.some(e=>e.art==='dio_stand_muda'&&e.born===m.t))
+      singularFx(m,'dio_stand_recuo',m.sides[i],.275,{angle:dash.angle,stand:true});
+  }
   contact=contact||separateBalls(a,b);
   if(contact&&(m.t>=m.contact||active.some(f=>basicAcceleration(m,f)<1&&(f.contactReady??0)<=m.t))){
     // Alternate initiative on contact. A defeated or stunned fighter cannot counter.
@@ -2864,6 +3076,7 @@ function stepDuel(m){
   stepMirages(m);
   stepGround(m);
   mythStep(m);thirdTicks(m);divineStep(m,previous);
+  stepSingular(m,previous);
   resolveShots(m,previous);
   stepBossMoves(m);
   stepConstellations(m);
@@ -3066,7 +3279,7 @@ const WORLDS = [
 const worldOf = state=>WORLDS[state.world??0];
 const levelCap = state=>10*(1+(state.unlocked??0));
 const COLORS = {Verde:'#71dd9f',Laranja:'#ffab68',Amarelo:'#f5d66c',Azul:'#83baff',Branco:'#ecebff',Roxo:'#cc95ff',Rosa:'#f592bc',Preto:'#a8a2be',Vermelho:'#ff8290',Turquesa:'#70e1da',Dourado:'#ffe28a'};
-const TIERS = ['Comum','Incomum','Rara','Épica','Mítica','Divina','Secreta','Transcendente'];
+const TIERS = ['Comum','Incomum','Rara','Épica','Mítica','Divina','Secreta','Transcendente','Singular'];
 // PV, ataque, magia, defesa, resistência e velocidade no nível 1, antes da função.
 // Degrau de +22% a +30% por raridade, garantindo Tier N Normal < Tier N Shiny (+12%) < Tier N+1 Normal.
 const baseStats = [
@@ -3077,10 +3290,14 @@ const baseStats = [
   [230, 46, 46, 28, 28, 109],
   [290, 58, 58, 35, 35, 112],
   [370, 74, 74, 44, 44, 116],
-  [480, 96, 96, 58, 58, 120]
+  [480, 96, 96, 58, 58, 120],
+  [590, 118, 118, 71, 71, 124]
 ];
 const roles = {Combatente:[.10,.25,-.15,0,0,0],Guardião:[.25,-.10,0,.25,.15,0],Mágico:[-.15,0,.30,0,.10,0],Suporte:[0,-.15,.15,0,.15,.05]};
 const roster = [
+  ['dio-over-heaven','DIO Over Heaven',9,'Roxo','Combatente','singular_dio','Sobrescrita da Realidade',['Equipe',{attack:18,magic:12}],'ap-dio-over-heaven','JoJo'],
+  ['goku-xeno-limite-rompido','Goku Xeno',9,'Vermelho','Mágico','singular_xeno','Kamehameha do Limite Rompido',['Equipe',{magic:20,speed:8}],'ap-goku-xeno-limite-rompido','Dragon Ball'],
+  ['saitama-eco-do-futuro','Saitama · Eco do Futuro',9,'Dourado','Combatente','singular_saitama','Soco de Dois Tempos',['Equipe',{attack:20,hp:12}],'ap-saitama-eco-do-futuro','One Punch Man'],
   ["hoova-shisui","Hoova · Shisui Uchiha",6,"Verde","Mágico","koto","Kotoamatsukami",["Verde",{magic:15,speed:8}],"ap-hoova-shisui","Naruto"],
   ["zawa-cheon","Zawa · Cheon Yeo Woon",7,"Roxo","Combatente","demonSword","Espada do Demônio Celestial",["Roxo",{attack:20,speed:8}],"ap-zawa-cheon","Nano Machine"],
   ["careca-kumagawa","Careca · Kumagawa Misogi",8,"Preto","Suporte","fiction","All Fiction",["Equipe",{magic:18,resistance:10}],"ap-careca-kumagawa","Medaka Box"],
@@ -3234,7 +3451,11 @@ const roster = [
   ["eternal-sailor-moon", "Eternal Sailor Moon", 8, "Branco", "Suporte", "heal", "Luz da Lua Eterna", ["Suporte", {"hp": 8}], "ap-eternal-sailor-moon", "Sailor Moon"],
   ["anos-voldigoad", "Anos Voldigoad", 7, "Preto", "Mágico", "beam", "Destruição da Fonte", ["Mágico", {"magic": 8}], "ap-anos-voldigoad", "The Misfit of Demon King Academy"],
 ];
-const approvedArt = {"hoova-shisui":"hoova-shisui","zawa-cheon":"zawa-cheon","careca-kumagawa":"careca-kumagawa",
+const approvedArt = {
+  'dio-over-heaven':'dio-over-heaven',
+  'goku-xeno-limite-rompido':'goku-xeno-limite-rompido',
+  'saitama-eco-do-futuro':'saitama-eco-do-futuro',
+"hoova-shisui":"hoova-shisui","zawa-cheon":"zawa-cheon","careca-kumagawa":"careca-kumagawa",
   "yamcha": "yamcha",
   "bulma": "bulma",
   "piccolo": "piccolo",
@@ -3399,6 +3620,10 @@ const CHARACTERS = Object.fromEntries(roster.map(([id,name,tier,color,role,kind,
     sprite:approvedArt[id]?'ap-'+approvedArt[id]:sprite,universe}];
 }));
 const SKILL_EFFECTS = {
+  singular_dio:'Arena: investida de 210% do Ataque que remove escudos, quatro socos de 25% e uma fenda de 80% da Magia. No banco, reduz o próximo golpe em 65% e lança um contrasselo de 135% da Magia.',
+  singular_xeno:'Arena: um feixe de 215% da Magia e dois fragmentos de 55%. No banco, abre duas fendas com feixes de 85% da Magia cada.',
+  singular_saitama:'Arena: soco de 190% do Ataque com eco de 130%. No banco, arma uma zona de defesa e dispara uma contraonda de 155% do Ataque.',
+
   koto:'Genjutsu de 150% da Magia. A próxima habilidade do alvo causa 35% menos dano. Na Arena, causa 175% da Magia e marca por 4 s, reduzindo o próximo golpe em 40%. Recarga de 8 s.',
   demonSword:'Três cortes de 65% do Ataque. O terceiro ignora metade da Defesa. Na Arena, dispara duas lâminas de 70%. Se alguma acertar, lança um corte de 100% que ignora metade da Defesa. Recarga de 7 s.',
   fiction:'Na campanha, apaga um golpe fatal contra si uma vez por batalha. Na Arena, lança um parafuso de 130% da Magia e protege o aliado ativo por 4 s. Apaga até 180% da Magia em dano do próximo golpe. Recarga de 10 s.',
@@ -3434,7 +3659,7 @@ const SKILL_EFFECTS = {
 SKILL_EFFECTS.ward=SKILL_EFFECTS.piccolo;
 SKILL_EFFECTS.rush=SKILL_EFFECTS.yamcha;
 const recruitPools = TIERS.map((_,i)=>Object.values(CHARACTERS).filter(c=>c.tier===i+1));
-const chanceByTier = [.57,.27,.11198,.038,.008,.00165,.00032,.00005];
+const chanceByTier = [.57,.27,.11197,.038,.008,.00165,.00032,.00005,.00001];
 const passives={
   'Haki do Rei':'Ao iniciar a luta, trava as ações inimigas por 1,5 s e aumenta o dano sofrido por eles em +15%. Uma ativação por equipe.',
   'Kaidō':'Inicia o combate com um escudo protetor equivalente a 18% dos PV máximos.',
@@ -3789,7 +4014,7 @@ function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES
   let p=random(),tier=1;
   const weights=recruitWeights(rates.rare);
   for(const weight of weights){if(p<weight)break;p-=weight;tier++;}
-  tier=Math.min(tier,8);
+  tier=Math.min(tier,TIERS.length);
   const pool=recruitPools[tier-1];
   const local=pool.filter(c=>c.universe===universe);
   // One ticket per character globally, plus a second ticket for each local character.
@@ -3807,7 +4032,7 @@ function rollRecruit(random,luck=.10,universe='Dragon Ball',rarePercent=UPGRADES
   return {id:card.id,shiny,trait:trait?.name??null,oddsBasis:'recruitable',odds:Math.round(1/(weights[tier-1]*cardChance*(shiny?shinyP:1-shinyP)*traitP))};
 }
 
-const SALE_PRICES=[8,20,50,125,350,1000,3500,12000];
+const SALE_PRICES=[8,20,50,125,350,1000,3500,12000,40000];
 const RECOVERY_MS=20000;
 function readyAt(state,uid){
   return Math.max(state.partyRecovery??0,state.recovery?.[uid]??0);
@@ -3977,7 +4202,11 @@ function settle(state,battle){
       if(saleMatches(state.autoSell,copy,state.collection)){
         entry.sold=copy;entry.saleGold=SALE_PRICES[tier-1];entry.gold+=entry.saleGold;state.gold+=entry.saleGold;
         if(tier>=5){state.items??={};state.items.essence=(state.items.essence??0)+(tier-4);}
-      }else{state.collection.push(copy);entry.recruit=copy;}
+      }else{
+        state.collection.push(copy);
+        entry.recruit=copy;
+        if(tier===9)state.singularDiscovered=true;
+      }
     }
     if(battle.boss && !battle.towerFloor){
       state.completed=true;
@@ -4264,7 +4493,7 @@ function ballChallenge(state,action,now){
     }
   }
   state.ballSequence=(state.ballSequence??0)+1;
-  state.ballRun={physics:5,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
+  state.ballRun={physics:6,launchSeed:match.launchSeed,sequence:state.ballSequence,left,right,limit,raid,weekly,floor,damage,items,reward:rewardGold,bonusItems,milestones:newMilestones,affix:affix?.name??null,result:match.result};
   return true;
 }
 function challenge(state,now){
@@ -4790,7 +5019,7 @@ class ApiError extends Error {
   constructor(status,message,code){super(message);this.status=status;this.code=code;}
 }
 function reject(status,message,code){throw new ApiError(status,message,code);}
-const BUILD='nexus-namek-59';
+const BUILD='nexus-namek-60';
 const RANKINGS_TTL=15000;
 const rankingsCache=new WeakMap();
 const invalidateRankings=db=>rankingsCache.delete(db);
@@ -4872,7 +5101,14 @@ const schemas=[
   END`
 ];
 const initialized=new WeakSet();
-const SCHEMA_VERSION=3;
+const SCHEMA_VERSION=4;
+const discoverySchema=[
+  'CREATE TABLE IF NOT EXISTS nexus_discoveries(tier INTEGER PRIMARY KEY)',
+  `CREATE TRIGGER IF NOT EXISTS nexus_singular_discovery AFTER UPDATE OF game ON nexus_players
+    WHEN json_extract(NEW.game,'$.singularDiscovered')=1
+      AND coalesce(json_extract(OLD.game,'$.singularDiscovered'),0)=0
+    BEGIN INSERT OR IGNORE INTO nexus_discoveries(tier) VALUES(9); END`
+];
 async function initialize(db){
   if(initialized.has(db))return;
   let schema;
@@ -4883,7 +5119,8 @@ async function initialize(db){
     if(!/no such table: (?:main\.)?nexus_schema_version\b/i.test(String(error?.message)))throw error;
   }
   if(!schema||schema.version<SCHEMA_VERSION){
-    const migration=[...schemas,...serialSchema('nexus_players',true),
+    const previous=(schema?.version??0)<3?[...schemas,...serialSchema('nexus_players',true)]:[];
+    const migration=[...previous,...discoverySchema,
       'CREATE TABLE IF NOT EXISTS nexus_schema_version(id INTEGER PRIMARY KEY,version INTEGER NOT NULL)',
       'INSERT INTO nexus_schema_version(id,version) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=max(version,excluded.version)'];
     await db.batch(migration.map((sql,i)=>i===migration.length-1?db.prepare(sql).bind(SCHEMA_VERSION):db.prepare(sql)));
@@ -5149,7 +5386,7 @@ async function rankedMatch(db,id,{day,attempt}){
     reject(409,'Sem adversários disponíveis. Cada jogador pode ser sorteado uma vez por ciclo.');
   }
   const other=rival._team;
-  const run={physics:5,ranked:true,rivalName:rival.name,left:own.fighters,right:other.fighters,limit:120};
+  const run={physics:6,ranked:true,rivalName:rival.name,left:own.fighters,right:other.fighters,limit:120};
   const match=duelEngine.finishDuel(duelEngine.createDuel(run.left,run.right,run.limit));
   run.result=match.result;
   run.launchSeed=match.launchSeed;
@@ -5355,6 +5592,10 @@ export default {
       stage='schema';
       await initialize(db);
       stage='route';
+      if(request.method==='GET'&&path==='/api/discoveries'){
+        const discovered=await db.prepare('SELECT tier FROM nexus_discoveries WHERE tier=9').first();
+        return json({singular:!!discovered});
+      }
       if(path.startsWith('/api/auth/'))return await socialAuth(request,env,db,new URL(request.url));
       const post=request.method==='POST';
       

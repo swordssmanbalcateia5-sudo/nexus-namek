@@ -24,10 +24,13 @@ test('raridade máxima depende do Rastreio e do excedente de Sorte',()=>{
   assert.equal(tier(.8401,.1,16),3);
   assert.equal(tier(.4599,1,36),2);
   assert.equal(tier(.4601,1,36),3);
-  assert.equal(tier(.999949,.1,16),7);
-  assert.equal(tier(.999951,.1,16),8);
-  assert.equal(tier(.99983,1,36),7);
-  assert.equal(tier(.99984,1,36),8);
+  assert.equal(tier(.999939,.1,16),7);
+  assert.equal(tier(.999941,.1,16),8);
+  assert.equal(tier(.999797,1,36),7);
+  assert.equal(tier(.999798,1,36),8);
+  assert.equal(tier(.999989,.1,16),8);
+  assert.equal(tier(.999991,.1,16),9);
+  assert.equal(tier(.999967,1,36),9);
 });
 
 test('Ritmo exige ouro e mundo desbloqueado em cada etapa',()=>{

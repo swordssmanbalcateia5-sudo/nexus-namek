@@ -1,4 +1,5 @@
 import {unitLabel} from './unit-label.js';
+import * as rebalanceDuel from './duel-v5.js';
 import {affinity} from "./engine.js";
 import {ARENA_SHOP,GOLD_SHOP,weeklyCycle,arenaLeague} from './community-rules.js';
 import {MAX_STARS,TRAIT_PITY_LIMIT,PRESET_SLOTS,PRESET_LABELS,RAID_MILESTONES,raidClaims,WEEKLY_TOWER_FLOORS,awakenCost,dexMastery,towerAffix,weeklyTowerToday,weeklyTowerEnemies,goldShopPrice,autoFormation,dexSummary,duplicateSellCandidates,loadoutChance,slotTraits,raidToday,towerEnemies,saleSettings,describeAutoSell,canSellUnit,formationCost,leaderApplies,RECOVERY_MS,SALE_PRICES,readyAt,formationSlots,spriteFor,recruitRates,formationPower,projectedPower,unitPower,WORLDS,worldOf,levelCap,CHARACTERS,COLORS,SKILL_EFFECTS,TIERS,TRAITS,UPGRADES,AWAY_THRESHOLD,AFK_ENCOUNTER_LIMIT,advanceWithPresence,advance,applyGameAction,fighter,fresh,levelAt,maxLevel,readyForBoss,upgradeLevel,waitFor,xpProgress} from './game.js';
@@ -221,7 +222,7 @@ function switchFight(key){
   ({duel=null,rival=null,viewingRun=null}=savedFights.get(key)??{});
   fightContext=key;frameTime=0;carry=0;
 }
-const arenaReplay={5:{createDuel,stepDuel,finishDuel},4:build57Duel,3:frozenDuel,2:previousDuel};
+const arenaReplay={6:{createDuel,stepDuel,finishDuel},5:rebalanceDuel,4:build57Duel,3:frozenDuel,2:previousDuel};
 function replayRules(run){return arenaReplay[run.physics]??legacyDuel}
 function watchRun(run){
   if(!run.ranked)mode=run.raid?'raid':run.weekly?'weeklyTower':'tower';
@@ -621,7 +622,23 @@ function transaction(action,offline=false){
 
 let bulkCommon=false;
 function lockButton(u){return `<button class="ghost" data-lock-copy="${u.uid}" aria-pressed="${!!u.locked}">${u.locked?'Destrancar':'Trancar'}</button>`;}
+let singularKnown=false,singularCheckAt=0;
+async function refreshSingularDiscovery(){
+  if(singularKnown||location.protocol==='file:'||Date.now()<singularCheckAt)return;
+  singularCheckAt=Date.now()+30000;
+  try{
+    const response=await fetch('/api/discoveries');
+    if(!response.ok)return;
+    const {singular}=await response.json();
+    if(singular===true){
+      singularKnown=true;
+      if(tab==='indice')renderDex($('#panel'));
+    }
+  }catch{/* A consulta será repetida enquanto o Índice estiver aberto. */}
+}
 function renderDex(panel){
+  if(state.singularDiscovered&&community?.active())singularKnown=true;
+  void refreshSingularDiscovery();
   const {characters,traits,totals}=dexSummary(state);
   const mastery=dexMastery(state);
   const owned=characters.filter(c=>c.count).length;
@@ -643,7 +660,8 @@ function renderDex(panel){
       const u=state.collection.find(u=>u.id===c.id);
       return `<button class="dex-card" data-profile="${u.uid}">${img(spriteFor(u))}<strong>${unitLabel(u)}</strong><small>${c.count} na coleção · ${c.normal?'Normal':''}${c.normal&&c.shiny?' / ':''}${c.shiny?'Shiny':''}</small><small>${c.worlds.length?'Chance dobrada em '+c.worlds.join(', '):'Mesma chance em todos os mundos'}</small></button>`;
     }).join('');
-    return `<section class="card dex-group"><h3 class="rar-name rarity-${i+1}">${tier} <small>${list.filter(c=>c.count).length}/${list.length}</small></h3><div class="dex-grid">${cards}</div></section>`;
+    const reveal=i!==8||singularKnown||(location.protocol==='file:'&&state.singularDiscovered);
+    return `<section class="card dex-group" data-dex-tier="${i+1}"><h3 class="${reveal?`rar-name rarity-${i+1}`:''}">${reveal?tier:'???'} <small>${list.filter(c=>c.count).length}/${list.length}</small></h3><div class="dex-grid">${cards}</div></section>`;
   }).join('');
   panel.innerHTML=`${masteryCard}<article class="card"><h2>Índice de personagens</h2><p>Todos os ${totals.totalChars} personagens podem aparecer em encontros comuns de qualquer mundo. Dentro da mesma raridade, cada personagem do universo local tem o dobro da chance de um visitante.</p><p>${owned}/${totals.totalChars} na coleção · ${totals.seenChars} descobertos · ${totals.shinyChars} variantes Shiny descobertas</p></article>${groups}<details class="card"><summary>Traits descobertas · ${totals.seenTraits}/${totals.totalTraits}</summary><p>${traits.filter(t=>t.seen).map(t=>t.name).join(' · ')||'Nenhuma trait descoberta.'}</p></details>`;
 }
@@ -1650,6 +1668,7 @@ setInterval(()=>{
     const entry=boards.get(community.playerId()+'/'+competitionKind());
     if(!entry||Date.now()>=entry.until)drawCompetition();
   }
+  if(tab==='indice')void refreshSingularDiscovery();
   if(tab==='arena')updateDuelButton();
   if(tab==='modos'){
     updateTowerAdvance(now);
